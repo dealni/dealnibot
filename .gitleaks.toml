@@ -1,0 +1,45 @@
+# Configuração do gitleaks para o DealniBot.
+#
+# Usada pelo job de varredura de segredo em .github/workflows/, pelo hook de
+# pre-commit e por qualquer execução manual — o gitleaks acha este arquivo
+# sozinho quando o alvo é a raiz do repositório.
+#
+# Duas coisas moram aqui: REGRA própria (o que o conjunto padrão não pega) e
+# ALLOWLIST (o que ele pega e não é segredo). A exceção por PATH só vale quando
+# o arquivo é GERADO e produz achado novo a cada regeneração — fingerprint nesse
+# caso envelhece sozinho e a dispensa vira manutenção perpétua.
+#
+# FIXTURE DE TESTE NÃO É CASO DE ALLOWLIST. Achado em arquivo de teste se
+# resolve de duas maneiras, nesta ordem: gerar o material em tempo de execução
+# (openssl_pkey_new, random_bytes) ou trocar o valor por um que não case com a
+# regra. Dispensar o caminho inteiro silencia também o segredo de verdade que
+# alguém colar ali amanhã.
+#
+# Achado pontual em arquivo escrito à mão vai por FINGERPRINT no
+# .gitleaksignore, com a justificativa ao lado. Segredo REAL que já foi
+# versionado também vai para lá, um fingerprint por linha, com data e estado da
+# rotação. A diferença importa: allowlist quer dizer "não é segredo";
+# .gitleaksignore quer dizer "está no histórico e o alerta não conserta — ou a
+# chave precisa ser rotacionada, ou o valor nunca foi credencial".
+
+title = "Configuração do gitleaks deste repositório"
+# O `minVersion` faz o gitleaks recusar a execução com um binário mais antigo
+# do que a sintaxe usada aqui, em vez de ignorar em silêncio o que não entende.
+minVersion = "v8.30.1"
+
+[extend]
+useDefault = true
+
+# A regra `telegram-bot-api-token` do conjunto padrão é prefiltrada por
+# palavra-chave: só dispara quando "telegram" aparece perto do valor. A regra
+# abaixo reconhece o formato do token mesmo sem essa palavra nas proximidades.
+#
+# O token falso da suíte (`000000:TEST_TOKEN`, em phpunit.xml) não casa: são 6
+# dígitos e 10 caracteres depois dos dois-pontos.
+[[rules]]
+id = "telegram-bot-token-familia"
+description = "Token de bot do Telegram (<id numérico>:<35 caracteres>)"
+regex = '''[0-9]{8,10}:[A-Za-z0-9_-]{35}'''
+
+# --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+# --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------

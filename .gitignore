@@ -1,0 +1,87 @@
+# Bloco base: o que nunca entra no Git por ser dado de produção, dependência,
+# credencial ou artefato de ferramenta. Vai SEMPRE no topo do arquivo; regra
+# que só faz sentido para este bot entra no bloco delimitado do fim.
+
+# Banco de dados — bot.db pode conter dados reais de produção, nunca versionado
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.db.privacidade.lock
+# Backups do bot.db (ex.: bot.db.backup-pre-migracao-2026-07-22)
+bot.db.backup-*
+# Snapshots locais (processos/snapshot_banco.php) quando o diretório não foi
+# configurado para fora do checkout. Os arquivos já casariam com *.db acima; a
+# regra de diretório evita versionar qualquer coisa que caia junto.
+/snapshots/
+
+# Dependências do Composer
+vendor/
+
+# Dependências das ferramentas de hooks (Lefthook e Commitlint)
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Arquivos de configuração sensíveis
+inclusos/config.php
+
+# Ambiente local. O `.env` nasce de `.env.example` e recebe token de bot, senha
+# de banco e chave de gateway REAIS; o exemplo continua versionado porque não
+# casa com este padrão e é ele que o contrato de ambiente confere.
+.env
+
+# Certificados e chaves privadas — NUNCA versionar
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+
+# Arquivos do macOS
+**/.DS_Store
+
+# Configurações locais de ferramentas
+**/.claude/settings.local.json
+
+# Arquivos nohup
+**/nohup.out
+
+# PHPUnit
+.phpunit.cache/
+.phpunit.result.cache
+
+# PHP-CS-Fixer
+.php-cs-fixer.cache
+
+# phpcpd tem composer.json próprio (ver docs/TESTES.md, "Duplicação"); o lock
+# dele é versionado, o vendor não.
+tools/phpcpd/vendor/
+
+# Relatórios do Rector e do composer outdated, quando gerados localmente
+rector.log
+outdated.log
+
+# Artefatos temporários das ferramentas de qualidade
+.artifacts/
+
+# Arquivos temporários de ferramenta e de empacotamento
+**/*.tmp
+**/*.cache
+**/*.tar.gz
+
+# Carimbo da publicação, gravado no host pelos scripts de scripts/deploy/ e
+# lido por deploy:verify. É estado DO HOST (qual commit está no ar, quando, por
+# quem), não do código: versioná-lo faria cada publicação sujar a árvore que o
+# próprio deploy exige limpa, e faria todo checkout afirmar estar no ar.
+/.release.json
+
+# --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+# Cópias do ambiente e exportações do PostgreSQL.
+.env.*
+!/.env.example
+*.dump
+*.dump.age
+# --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------

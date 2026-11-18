@@ -1,0 +1,35 @@
+# Texto normalizado para evitar gates diferentes entre Windows, macOS e Linux.
+* text=auto eol=lf
+
+# Só há linha para extensão que existe na árvore: regra para linguagem ausente
+# é combinada que ninguém confere e que envelhece sem nada reclamar.
+*.json text eol=lf
+*.json5 text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.neon text eol=lf
+*.php text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+*.xml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Binário declarado à mão: a heurística do `text=auto` decide por amostragem do
+# conteúdo, e um arquivo que ela classifique errado sai do checkout com CRLF
+# dentro — corrompido, e sem nenhum gate para reclamar.
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+
+# --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+# Nenhuma extensão de texto além das de cima existe hoje nesta árvore.
+# --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------

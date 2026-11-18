@@ -1,0 +1,73 @@
+name: Preparar PostgreSQL nativo
+description: Instala PostgreSQL e inicia um cluster descartável no runner Ubuntu.
+inputs:
+  version:
+    description: Versão principal do PostgreSQL.
+    required: true
+  database:
+    description: Banco inicial do cluster.
+    default: postgres
+  password:
+    description: Senha exclusiva do banco de testes.
+    default: postgres
+  port:
+    description: Porta TCP do cluster.
+    default: '5432'
+  socket:
+    description: Diretório opcional para o socket Unix dos testes isolados.
+    default: ''
+  pgtap:
+    description: Instalar pgTAP para testes SQL.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Instalar e iniciar cluster descartável
+      shell: bash
+      env:
+        PG_CI_VERSION: ${{ inputs.version }}
+        PG_CI_DATABASE: ${{ inputs.database }}
+        PG_CI_PASSWORD: ${{ inputs.password }}
+        PG_CI_PORT: ${{ inputs.port }}
+        PG_CI_SOCKET: ${{ inputs.socket }}
+        PG_CI_PGTAP: ${{ inputs.pgtap }}
+      run: |
+        set -euo pipefail
+        # Esta preparação altera serviços apenas no runner efêmero do GitHub.
+        [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${RUNNER_OS:-}" == Linux ]]
+        [[ "$PG_CI_VERSION" =~ ^(16|17)$ ]]
+        [[ "$PG_CI_PORT" =~ ^[0-9]+$ ]]
+        sudo apt-get update
+        sudo apt-get install --yes postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+        packages=("postgresql-$PG_CI_VERSION" "postgresql-client-$PG_CI_VERSION")
+        if [[ "$PG_CI_PGTAP" == true ]]; then
+          packages+=("postgresql-$PG_CI_VERSION-pgtap")
+        fi
+        sudo apt-get install --yes "${packages[@]}"
+        # Libera a porta padrão; o cluster da imagem do runner não é usado.
+        sudo systemctl stop postgresql
+        pg_bin="/usr/lib/postgresql/$PG_CI_VERSION/bin"
+        pg_work="$(mktemp -d /tmp/postgres-ci.XXXXXX)"
+        sudo chown postgres:postgres "$pg_work"
+        pg_socket="${PG_CI_SOCKET:-$pg_work/socket}"
+        sudo install -d -o postgres -g postgres -m 755 "$pg_socket"
+        # O socket precisa ser acessível aos testes com namespace de rede isolada.
+        sudo chmod 755 "$pg_work"
+        pg_password_file="$(mktemp)"
+        trap 'rm -f "$pg_password_file"' EXIT
+        printf '%s\n' "$PG_CI_PASSWORD" > "$pg_password_file"
+        sudo install -o postgres -g postgres -m 600 "$pg_password_file" "$pg_work/password"
+        sudo -u postgres "$pg_bin/initdb" -D "$pg_work/data" -U postgres \
+          --auth-local=trust --auth-host=scram-sha-256 --pwfile="$pg_work/password" \
+          --encoding=UTF8 --locale=C.UTF-8
+        sudo rm "$pg_work/password"
+        sudo -u postgres "$pg_bin/pg_ctl" -D "$pg_work/data" -l "$pg_work/server.log" \
+          -o "-h 127.0.0.1,::1 -p $PG_CI_PORT -k $pg_socket" -w start
+        if [[ "$PG_CI_DATABASE" != postgres ]]; then
+          sudo -u postgres "$pg_bin/createdb" -h "$pg_socket" -p "$PG_CI_PORT" "$PG_CI_DATABASE"
+        fi
+        PGPASSWORD="$PG_CI_PASSWORD" "$pg_bin/psql" -X -v ON_ERROR_STOP=1 \
+          -h 127.0.0.1 -p "$PG_CI_PORT" -U postgres -d "$PG_CI_DATABASE" \
+          -c 'SELECT version();'
+        echo "$pg_bin" >> "$GITHUB_PATH"

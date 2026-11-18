@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         cacheDirectory=".artifacts/quality/cache/phpunit"
+         colors="true"
+         failOnAllIssues="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         failOnDeprecation="true"
+         failOnPhpunitDeprecation="true"
+         failOnPhpunitNotice="true"
+         failOnPhpunitWarning="true"
+         failOnNotice="true"
+         failOnEmptyTestSuite="true"
+         failOnSkipped="true"
+         failOnIncomplete="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         displayDetailsOnAllIssues="true"
+         executionOrder="random"
+         resolveDependencies="true">
+    <!--
+      executionOrder="random" existe por causa do ESTADO GLOBAL desta suíte:
+      constantes definidas por um teste (LOGS_ATIVO, TOKEN_BOT) valem para o
+      processo inteiro e não se desfazem, e vários testes montam Redis/banco
+      falsos que guardam estado entre chamadas. Aqui o tests/bootstrap.php NÃO
+      define nenhuma constante — nem de credencial, nem de regra de negócio.
+      Em ordem fixa, um teste que só passa porque
+      outro rodou antes dele fica verde para sempre; com ordem aleatória ele
+      falha assim que o sorteio muda. O PHPUnit imprime "Random Seed" no topo da
+      execução; para reproduzir uma falha, repita passando esse mesmo número na
+      opção de linha de comando `random-order-seed` do PHPUnit.
+
+      resolveDependencies fica explícito ainda que "true" seja o padrão: é ele
+      que garante que #[Depends] continue respeitado apesar do sorteio.
+
+      failOnSkipped e failOnIncomplete dão dente à regra "nada de
+      markTestSkipped novo". Os poucos markTestSkipped que restam são guardas de
+      ambiente (rede viva, wrapper https ausente, constante já definida) que HOJE
+      não disparam em nenhuma máquina nem no CI. Se um deles passar a disparar, o
+      teste deixou de exercitar o que dizia exercitar, e isso tem que aparecer
+      como reprovação — não como uma linha cinza que ninguém lê e um resultado
+      aprovado sem a verificação.
+
+    -->
+    <testsuites>
+        <testsuite name="Unit">
+            <directory suffix="Test.php">tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory suffix="Test.php">tests/Integration</directory>
+        </testsuite>
+        <!--
+          Uma suíte por categoria da taxonomia da frota (docs/TESTES.md).
+          A classificação é por DIRETÓRIO, e é o que `composer check:tests`
+          confere: arquivo de teste fora destas pastas não é selecionado por
+          comando nenhum, e categoria sem arquivo faz o comando dela mentir.
+        -->
+        <testsuite name="Contract">
+            <directory suffix="Test.php">tests/Contract</directory>
+        </testsuite>
+        <testsuite name="Security">
+            <directory suffix="Test.php">tests/Security</directory>
+        </testsuite>
+        <testsuite name="Performance">
+            <directory suffix="Test.php">tests/Performance</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <!-- error_reporting explícito para a suíte não herdar o do php.ini do
+             host, e display_errors para que erro fatal — que o PHPUnit não
+             intercepta — apareça, em vez de virar processo-filho morto sem
+             explicação.
+
+             Nenhum dos dois é o que faz depreciação reprovar teste: o PHP
+             entrega TODO erro ao error handler registrado, independente de
+             error_reporting, e o Runner\ErrorHandler do PHPUnit 13 só consulta
+             a ini para reconhecer o operador @ (`(error_reporting() &
+             ~INSUPPRESSIBLE_LEVELS) === 0`). Quem reprova é failOnDeprecation /
+             failOnNotice, no elemento raiz. -->
+        <ini name="error_reporting" value="-1"/>
+        <ini name="display_errors" value="1"/>
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="CHATBOTS_TESTING" value="1" force="true"/>
+        <env name="CHATBOTS_NETWORK_DISABLED" value="1" force="true"/>
+        <env name="DB_USER" value="test-only" force="true"/>
+        <env name="DB_PASSWORD" value="test-only" force="true"/>
+        <env name="REDIS_HOST" value="127.0.0.1" force="true"/>
+        <env name="REDIS_PORT" value="1" force="true"/>
+        <env name="DEALNI_RETENCAO_CONTATOS_DIAS" value="365" force="true"/>
+        <env name="REDIS_PASSWORD" value="test-only" force="true"/>
+        <env name="TELEGRAM_BOT_TOKEN" value="000000:TEST_TOKEN" force="true"/>
+        <env name="OPENROUTER_API_KEY" value="test-only" force="true"/>
+    </php>
+    <source>
+        <include>
+            <directory suffix=".php">src</directory>
+            <directory suffix=".php">comandos</directory>
+            <directory suffix=".php">config</directory>
+            <directory suffix=".php">inclusos</directory>
+            <directory suffix=".php">processos</directory>
+            <directory suffix=".php">scripts</directory>
+            <file>bot.php</file>
+            <file>bot_web.php</file>
+            <file>health.php</file>
+            <file>index.php</file>
+            <file>ready.php</file>
+            <file>roteador.php</file>
+        </include>
+    </source>
+</phpunit>

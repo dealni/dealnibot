@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "revision": "bots-v4",
+  "reuse": [
+    {
+      "command": [
+        "bash",
+        "scripts/quality/with_local_config.sh",
+        "composer",
+        "check:all"
+      ],
+      "proof": "check:all"
+    }
+  ],
+  "executions": [
+    {
+      "command": [
+        "composer",
+        "check:all:run"
+      ],
+      "proves": [
+        "check:all"
+      ]
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/quality/with_local_config.sh",
+        "--validation-execution",
+        "composer",
+        "check:all:run"
+      ],
+      "proves": [
+        "check:all"
+      ]
+    },
+    {
+      "command": [
+        "composer",
+        "check:ci-local:run"
+      ],
+      "proves": [
+        "check:all"
+      ]
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/quality/with_local_config.sh",
+        "--validation-execution",
+        "composer",
+        "check:ci-local:run"
+      ],
+      "proves": [
+        "check:all"
+      ]
+    }
+  ],
+  "equivalence": {
+    "proof": "check:all",
+    "composerScripts": {
+      "check:ci-local": [
+        "Composer\\Config::disableProcessTimeout",
+        "node scripts/quality/validation-runner.mjs --proof check:all -- composer check:ci-local:run"
+      ],
+      "check:ci-local:run": [
+        "Composer\\Config::disableProcessTimeout",
+        "@putenv CI=1",
+        "@check:all:run",
+        "@check:online"
+      ],
+      "check:base": [
+        "Composer\\Config::disableProcessTimeout",
+        "@check:runtime",
+        "@check:tests",
+        "@check:complexity",
+        "@check:strict-types",
+        "@check:deploy-guards",
+        "@check:licenses",
+        "@check:gitleaks",
+        "npm run test:quality-tools",
+        "@check:config",
+        "@check:config:production",
+        "@check:config:examples",
+        "@check:env",
+        "@check:postgres",
+        "@check:editorconfig",
+        "@check:shell",
+        "@check:docs",
+        "@typecheck",
+        "@format:check",
+        "@check:deps:undeclared",
+        "@check:dead-code",
+        "@check:security",
+        "@check:duplication"
+      ],
+      "check:runtime": "bash scripts/quality/check_php_versions.sh runtime",
+      "check:tests": "@php scripts/quality/check_taxonomia_testes.php",
+      "check:complexity": [
+        "@php scripts/quality/check_tamanho.php",
+        "@php scripts/quality/check_linhas_funcao.php"
+      ],
+      "check:strict-types": "@php scripts/quality/check_strict_types.php",
+      "check:deploy-guards": [
+        "bash scripts/quality/check_deploy_guard.sh",
+        "bash scripts/quality/check_release_guards.sh"
+      ],
+      "check:licenses": "@php scripts/quality/check_licenses.php",
+      "check:gitleaks": "bash scripts/quality/check_gitleaks.sh",
+      "check:config": "@composer validate --strict --check-lock --no-check-publish",
+      "check:config:production": "@php scripts/quality/check_production_config.php",
+      "check:config:examples": [
+        "@php scripts/quality/check_config_examples.php",
+        "@php scripts/quality/check_fpm_environment.php"
+      ],
+      "check:env": "@php scripts/quality/check_env.php",
+      "check:postgres": "@php scripts/quality/check_postgres.php",
+      "check:editorconfig": "ec",
+      "check:shell": "bash scripts/quality/check_shell.sh",
+      "check:docs": "@php scripts/quality/check_doc_links.php",
+      "typecheck": "phpstan analyse --memory-limit=1G",
+      "format:check": "PHP_CS_FIXER_FUTURE_MODE=1 php-cs-fixer check --diff --format=txt",
+      "check:deps:undeclared": "composer-require-checker check --config-file=composer-require-checker.json",
+      "check:dead-code": "@php scripts/quality/run_composer_unused.php",
+      "check:security": "@php scripts/quality/run_semgrep.php",
+      "check:duplication": "@php scripts/quality/run_phpcpd.php",
+      "test": [
+        "Composer\\Config::disableProcessTimeout",
+        "@php scripts/quality/run_tests.php"
+      ],
+      "check:online": [
+        "@check:vulnerabilities",
+        "npm run check:vulnerabilities"
+      ],
+      "check:vulnerabilities": "@php scripts/quality/composer_audit_retry.php",
+      "check:all": [
+        "Composer\\Config::disableProcessTimeout",
+        "node scripts/quality/validation-runner.mjs --proof check:all -- composer check:all:run"
+      ],
+      "check:all:run": [
+        "Composer\\Config::disableProcessTimeout",
+        "@check:base",
+        "@test"
+      ]
+    },
+    "npmScripts": {
+      "test:quality-tools": "node --test --test-concurrency=1 scripts/quality/check_padronizacao.test.mjs scripts/quality/check_npm_licenses.test.mjs scripts/quality/check_composite_actions.test.mjs scripts/quality/check_commitlint.test.mjs scripts/quality/check_setup_node.test.mjs scripts/quality/check_redis_macos.test.mjs scripts/quality/check_redis_linux.test.mjs scripts/quality/check_worker_timestamp.test.mjs scripts/quality/check_redis_autenticacao.test.mjs scripts/quality/check_infra_padronizada.test.mjs scripts/quality/check_with_local_config.test.mjs scripts/quality/pre-push.test.mjs scripts/quality/check_staged_index.test.mjs scripts/quality/check_publicacao.test.mjs scripts/quality/check_publicacao_operacao.test.mjs scripts/quality/check_recuperacao.test.mjs scripts/quality/check_composer_padronizado.test.mjs scripts/quality/check_ordem_gates.test.mjs scripts/quality/check_publicacao_dependencias.test.mjs scripts/quality/validation-evidence.test.mjs scripts/quality/validation-environment.test.mjs scripts/quality/validation-recovery.test.mjs scripts/quality/validation-bindings.test.mjs",
+      "check:licenses": "node scripts/quality/check_npm_licenses.mjs",
+      "check:vulnerabilities": "npm audit --audit-level=high"
+    },
+    "ciLocalAlwaysExecutes": [
+      "@check:online"
+    ],
+    "scope": "check:all offline executa base integral, licenças das três árvores e suítes normais completas. check:ci-local compõe o mesmo check:all:run e acrescenta auditorias online; escolha um agregado, sem executar ambos em sequência. Somente check:all completo pode ser reutilizado no pre-push deste checkout.",
+    "environment": "Identidade externa capturada antes de CI, HMAC sintético e cluster PostgreSQL efêmero. Overrides de ferramentas e fixtures desativam o reuso.",
+    "toolProfile": "Caminhos PostgreSQL 17 e sandbox do macOS. Ferramenta ausente ou plataforma diferente desativa a evidência, preservando os gates completos."
+  },
+  "artifacts": [
+    ".artifacts",
+    "vendor/.phpstan-cache",
+    ".phpunit.cache",
+    ".phpunit.result.cache",
+    ".php-cs-fixer.cache",
+    "logs"
+  ],
+  "tools": [
+    "php",
+    "composer",
+    "bash",
+    "/bin/bash",
+    "git",
+    "node",
+    "npm",
+    "redis-server",
+    "redis-cli",
+    "gitleaks",
+    "semgrep",
+    "shellcheck",
+    "/usr/bin/sandbox-exec",
+    "curl",
+    "openssl",
+    "tar",
+    "/opt/homebrew/opt/postgresql@17/bin/initdb",
+    "/opt/homebrew/opt/postgresql@17/bin/pg_ctl",
+    "/opt/homebrew/opt/postgresql@17/bin/createdb",
+    "/opt/homebrew/opt/postgresql@17/bin/psql",
+    "/opt/homebrew/opt/postgresql@17/bin/postgres",
+    "/opt/homebrew/opt/postgresql@17/bin/pg_dump",
+    "/opt/homebrew/opt/postgresql@17/bin/pg_restore",
+    "vendor/bin/phpunit",
+    "vendor/bin/phpstan",
+    "vendor/bin/php-cs-fixer",
+    "vendor/bin/ec",
+    "vendor/bin/composer-require-checker",
+    "vendor/bin/composer-unused",
+    "tools/phpcpd/vendor/bin/phpcpd"
+  ]
+}

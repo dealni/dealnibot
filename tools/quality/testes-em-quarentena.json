@@ -1,0 +1,13 @@
+{
+    "_leia": "Inventário dos testes que PULAM. Toda chamada de markTestSkipped/markTestIncomplete da suíte precisa estar aqui, e `composer check:tests` reprova o que não estiver — e também a entrada que não pula mais nada. Quarentena tem prazo e não conta como cobertura. Ver \"Testes instáveis e quarentena\" em docs/TESTES.md.",
+    "guardas_de_ambiente": [
+        {
+            "arquivo": "tests/Integration/FuncoesHelpersTest.php",
+            "teste": "pularSeStubImpossivel",
+            "motivo": "O subprocesso `php -n` ainda carrega ext-redis por configuração do host, e aí não há como substituir a classe Redis por stub. Não dispara em nenhuma máquina da família nem no CI; se disparar, o teste deixou de exercitar o que diz exercitar.",
+            "registrado_em": "2026-08-30",
+            "responsavel": "dealni"
+        }
+    ],
+    "quarentena": []
+}

@@ -1,0 +1,5 @@
+{
+    "retencao_dias": 14,
+    "orcamento_bytes": 268435456,
+    "arquivos_adicionais": ["telegram.log", "erros_redis.log", "erros_admin.log", "geral.log"]
+}

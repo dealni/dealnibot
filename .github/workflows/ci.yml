@@ -1,0 +1,484 @@
+name: ci
+
+on:
+  # Pull requests validam mudanças antes da integração. O gatilho de push
+  # cobre os commits que entram em main.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # O evento entra no grupo porque gatilhos diferentes na MESMA ref são
+  # execuções diferentes: sem ele, um push cancelaria a execução disparada à
+  # mão sobre o mesmo commit antes de ela terminar.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-messages:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preparar Node.js, npm e dependências
+        uses: ./.github/actions/setup-node
+        with:
+          ignore-scripts: "true"
+      - name: Validate new commit messages
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          head_sha="$CHECKOUT_SHA"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+          elif [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            base_sha="$PUSH_BEFORE_SHA"
+            if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$base_sha"
+            fi
+          else
+            # No primeiro push não existe SHA anterior. A faixa do commitlint
+            # exclui o limite inferior; por isso, para incluir o commit raiz,
+            # lemos cada mensagem pelo stdin (a entrada documentada da CLI).
+            mapfile -t commits < <(git rev-list --reverse "$head_sha")
+            if [ ${#commits[@]} -eq 0 ]; then
+              echo "Nenhum commit novo para validar."
+              exit 0
+            fi
+            for commit in "${commits[@]}"; do
+              git show -s --format=%B "$commit" | npm exec --offline -- commitlint
+            done
+            exit 0
+          fi
+          # A CLI rejeita --from e --to iguais (e uma atualização que não
+          # acrescenta commits não tem mensagens para validar).
+          mapfile -t commits < <(git rev-list --reverse "${base_sha}..${head_sha}")
+          if [ ${#commits[@]} -eq 0 ]; then
+            echo "Nenhum commit novo para validar."
+            exit 0
+          fi
+          # Para push incremental e PR, o próprio commitlint lê a faixa Git;
+          # --from/--to é também o modo recomendado pela documentação de CI.
+          npm exec --offline -- commitlint --from "$base_sha" --to "$head_sha" --verbose
+
+  tests:
+    name: Tests (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # PHP 8.5 é o único runtime suportado.
+        php: ['8.5']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar PostgreSQL nativo
+        uses: ./.github/actions/setup-postgres
+        with:
+          version: "16"
+          database: chatbots_test_suite_dealnibot
+          password: test-only
+          socket: /tmp/chatbots-tests-pg-dealnibot
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          # O Composer é pinado em todo passo que o executa: uma troca de versão
+          # na imagem do runner não pode alterar resolução de dependência nem o
+          # comportamento dos scripts sem ninguém ter tocado no repositório.
+          tools: composer:2.10.3
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Extensões que o composer.json deste bot exige.
+          extensions: curl, mbstring, pdo_pgsql, redis
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Install local test services
+        run: |
+          sudo apt-get install -y redis-server
+          bash scripts/quality/check_php_cgi.sh
+          /usr/bin/unshare --version
+          /usr/bin/setpriv --version
+          dpkg-query --show --showformat='${Package} ${Version}\n' util-linux
+          ls -l /usr/bin/unshare /usr/bin/setpriv
+      # Os testes de headers exercitam a SAPI phpdbg.
+      - name: Check phpdbg
+        run: phpdbg -v
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Check platform requirements
+        run: composer check-platform-reqs
+      # A ordem aleatória encontra acoplamentos sem custo de manutenção; a ordem
+      # reversa transforma a segunda tentativa em um caso determinístico e
+      # reproduzível. pipefail preserva a falha do PHPUnit mesmo com o tee.
+      # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+      # O comando abaixo carrega o socket, o banco e o prefixo das variáveis de
+      # banco deste bot. Escalar literal não aceita comentário dentro, por isso o
+      # passo inteiro entra no bloco.
+      - name: Run tests in random and reverse order (error_reporting=E_ALL)
+        run: |
+          set -o pipefail
+          for order in random reverse; do
+            sudo /usr/bin/unshare --net -- /usr/bin/setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- /usr/bin/env HOME="$HOME" USER="$(id -un)" LOGNAME="$(id -un)" CHATBOTS_CI_EXPECTED_UID="$(id -u)" CHATBOTS_CI_EXPECTED_GID="$(id -g)" CHATBOTS_CI_PARENT_NETNS="$(/usr/bin/readlink /proc/self/ns/net)" \
+              'CHATBOTS_PG_TEST_DSN=pgsql:host=/tmp/chatbots-tests-pg-dealnibot;dbname=chatbots_test_suite_dealnibot' \
+              DEALNI_DB_USER=postgres DEALNI_DB_PASSWORD=test-only \
+              bash scripts/quality/check_ci_namespace.sh php -d error_reporting=E_ALL -d display_errors=1 -d display_startup_errors=1 \
+              scripts/quality/run_tests.php --order-by="$order" 2>&1 | tee "tests-${order}.log"
+          done
+          if grep -Eiq 'Deprecated:|E_DEPRECATED' tests-*.log; then
+            echo "Depreciação emitida pela suíte — veja os logs acima." >&2
+            exit 1
+          fi
+      # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+      # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+      # Este repositório não declara `test:suporte` no composer.json e não tem
+      # `suporte/`: o passo correspondente sai daqui, porque um passo que chama
+      # script inexistente reprova o job por motivo que não é defeito do produto.
+      # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+
+  quality:
+    name: Static analysis and style
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar PostgreSQL nativo
+        uses: ./.github/actions/setup-postgres
+        with:
+          version: "16"
+          database: chatbots_test_quality_dealnibot
+          password: test-only
+          socket: /tmp/chatbots-pg-dealnibot
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: composer:2.10.3
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Extensões que o composer.json deste bot exige.
+          extensions: curl, mbstring, pdo_pgsql, redis
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Install local test services
+        run: |
+          sudo apt-get install -y redis-server
+          bash scripts/quality/check_php_cgi.sh
+          /usr/bin/unshare --version
+          /usr/bin/setpriv --version
+          dpkg-query --show --showformat='${Package} ${Version}\n' util-linux
+          ls -l /usr/bin/unshare /usr/bin/setpriv
+      # `--check-lock` é o que transforma lock desatualizado em reprovação; sem
+      # ele o `validate` aceita um composer.json alterado sem `composer update`.
+      - name: Validate Composer configuration
+        run: composer validate --strict --check-lock --no-check-publish --no-interaction
+      # O manifesto do phpcpd é um grafo separado e tem lock próprio: ele
+      # precisa da mesma conferência, senão a única ferramenta fora do grafo
+      # principal é justamente a que pode flutuar sem ninguém ver.
+      - name: Validate PHPCPD Composer configuration
+        run: composer -d tools/phpcpd validate --strict --check-lock --no-check-publish --no-interaction
+      - name: Prepare disposable production configuration
+        run: php scripts/quality/prepare_ci_config.php
+      - name: Validate production configuration
+        env:
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # DSN, usuário, senha e, quando o contrato de ambiente deste bot exige,
+          # o segredo sintético do gateway. Nenhum valor daqui existe em painel.
+          DEALNI_DB_DSN: 'pgsql:host=/tmp/chatbots-pg-dealnibot;dbname=chatbots_test_quality_dealnibot'
+          DEALNI_DB_USER: postgres
+          DEALNI_DB_PASSWORD: test-only
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+        run: composer check:config:production
+      - name: Validate versioned configuration examples
+        run: composer check:config:examples
+      - name: Validate environment contract
+        run: composer check:env
+      - name: Validate local documentation links
+        run: composer check:docs
+      # Os três portões abaixo leem apenas arquivos do repositório (árvore de
+      # testes e código do produto) e rodam DEPOIS do preparo da configuração
+      # descartável: `inclusos/config.php` entra no escopo medido e não é
+      # versionado, então medir antes daria um arquivo a menos que o baseline e
+      # reprovaria por encolhimento que não é dívida técnica. Ficam dentro de um
+      # job que já existe — nenhum job novo, porque a franquia de minutos é o
+      # bloqueio operacional 1 da padronização.
+      - name: Verify test taxonomy and flaky policy
+        run: composer check:tests
+      - name: Enforce size and complexity ratchet
+        run: composer check:complexity
+      - name: Enforce strict_types ratchet
+        run: composer check:strict-types
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Validate PostgreSQL schema, migrations and concurrency
+        run: composer check:postgres
+      # Segundos, e são os únicos passos que exercitam o caminho de publicação:
+      # as recusas de deploy/rollback/deploy:verify e a restauração de verdade
+      # sobre banco descartável. Sem eles, um script de release quebrado só
+      # apareceria na janela de publicação, no host.
+      - name: Check release and deploy guards
+        # Um comando só: as recusas de deploy/rollback/release_check e o ensaio
+        # de restauração sobre banco descartável rodam dentro dele. O passo
+        # avulso de restauração saiu daqui porque repetia esse mesmo ensaio.
+        run: composer check:deploy-guards
+      - name: Check platform requirements
+        run: composer check-platform-reqs
+      - name: Enforce dependency license policy
+        run: composer check:licenses
+      # O par restore/save existe para separar LER de ESCREVER no cache: com a
+      # action inteira, toda execução — inclusive a de um pull_request — grava
+      # no escopo compartilhado da branch padrão.
+      #
+      # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+      # A chave por run_id nunca teria hit exato; o SHA permite reutilizar o
+      # resultado num re-run do mesmo commit. O hash do lock/configuração vem
+      # antes do SHA para o primeiro prefixo poder reaproveitar uma análise da
+      # mesma configuração sem cair diretamente no fallback amplo.
+      - name: Restore PHPStan result cache
+        id: phpstan-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/.phpstan-cache
+          key: phpstan-${{ runner.os }}-php-8.5-${{ hashFiles('composer.lock', 'phpstan*.neon', 'tools/phpstan/bootstrap.php') }}-${{ github.sha }}
+          restore-keys: |
+            phpstan-${{ runner.os }}-php-8.5-${{ hashFiles('composer.lock', 'phpstan*.neon', 'tools/phpstan/bootstrap.php') }}-
+            phpstan-${{ runner.os }}-php-8.5-
+          fail-on-cache-miss: false
+          lookup-only: false
+          enableCrossOsArchive: false
+      - name: Run PHPStan
+        run: composer typecheck
+      # Pull requests só restauram: nenhum resultado produzido por código não
+      # confiável é gravado no escopo compartilhado da branch padrão.
+      - name: Save PHPStan result cache
+        if: ${{ success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/.phpstan-cache
+          key: ${{ steps.phpstan-cache.outputs.cache-primary-key }}
+      # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+      - name: Check code style
+        run: composer format:check
+      # Símbolo usado sem o pacote/extensão correspondente declarado. Foi assim
+      # que apareceram ext-ctype, ext-filter, ext-iconv e psr/log faltando no
+      # composer.json: tudo funcionava porque vinham de carona por dependência
+      # transitiva, e teria quebrado na primeira máquina sem elas.
+      - name: Check undeclared dependencies
+        run: composer check:deps:undeclared
+      - name: Check unused dependencies
+        run: composer check:dead-code
+      - name: Check editorconfig compliance
+        run: composer check:editorconfig
+      # tools/phpcpd tem manifesto e lock próprios para manter a ferramenta de
+      # qualidade isolada do grafo principal; ver docs/TESTES.md.
+      - name: Install phpcpd
+        run: composer install -d tools/phpcpd --no-interaction --prefer-dist --no-progress
+      - name: Check PHPCPD platform requirements
+        run: composer check-platform-reqs --working-dir=tools/phpcpd --no-interaction
+      - name: Check code duplication
+        run: composer check:duplication
+
+  workflows:
+    name: Shell and workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: composer:2.10.3
+          coverage: none
+        env:
+          fail-fast: true
+      # Este job só passa linter: não sobe FastCGI nem Redis. O que ele precisa
+      # além do PHP é o Node, porque `check:composite-actions` é script npm.
+      - name: Preparar Node.js, npm e dependências
+        uses: ./.github/actions/setup-node
+        with:
+          ignore-scripts: "true"
+      # Versão pinada e tarball conferido por SHA-256, como o gitleaks. O
+      # shellcheck vem pré-instalado na imagem do runner, mas depender disso
+      # significaria trocar de versão do linter sem tocar em nada — e um linter
+      # que muda de opinião sozinho reprova commit que ontem passava.
+      - name: Install shellcheck and actionlint
+        env:
+          SHELLCHECK_VERSION: '0.11.0'
+          SHELLCHECK_SHA256: '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198'
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -sSfL -o shellcheck.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar xJf shellcheck.tar.xz --strip-components=1 -C "${RUNNER_TEMP}/bin" \
+            "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          curl -sSfL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz -C "${RUNNER_TEMP}/bin" actionlint
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+      # A asserção separada deixa a causa explícita antes de entrar nos dois
+      # gates: shellcheck para scripts e actionlint para workflows.
+      - name: Assert linters are on PATH
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          actionlint --version
+      - name: Lint shell scripts and workflows
+        run: |
+          composer check:shell
+          composer check:workflows
+          npm run check:composite-actions
+
+  reports:
+    name: Reports (não reprovam)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Este job é INFORMATIVO. O Rector aponta código morto e sintaxe que o 8.5 já
+    # substituiu; nada disso é defeito, e transformar sugestão em gate faria o CI
+    # ficar vermelho por opinião. O relatório vai para os artefatos.
+    #
+    # Sem `if:`. Uma condição que só aceita `schedule` num workflow que não
+    # declara esse gatilho deixa o job vivo apenas no disparo manual — ou seja,
+    # o relatório só existe quando alguém lembra de pedir, que é exatamente
+    # quando ele não serve. Declarar `schedule` aqui também não resolve: o
+    # gatilho vale para o workflow inteiro e pagaria a pipeline completa toda
+    # semana só para produzir dois logs que não reprovam nada.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: composer:2.10.3
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Extensões que o composer.json deste bot exige.
+          extensions: curl, mbstring, pdo_pgsql, redis
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Install local test services
+        run: |
+          sudo apt-get install -y redis-server
+          bash scripts/quality/check_php_cgi.sh
+          /usr/bin/unshare --version
+          /usr/bin/setpriv --version
+          dpkg-query --show --showformat='${Package} ${Version}\n' util-linux
+          ls -l /usr/bin/unshare /usr/bin/setpriv
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Rector (dry-run)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          composer rector | tee rector.log
+      - name: Outdated direct dependencies
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          composer outdated --direct --no-interaction | tee outdated.log
+      - name: Publish reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports
+          path: |
+            rector.log
+            outdated.log
+          if-no-files-found: warn
+          retention-days: 14
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Relatórios visíveis na raiz: nada oculto entra e não há opção extra
+          # do upload-artifact travada neste repositório.
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+
+  postgresql:
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar PostgreSQL nativo
+        uses: ./.github/actions/setup-postgres
+        with:
+          version: "${{ matrix.postgres }}"
+          database: chatbots_test_dealnibot
+          password: test-only
+          port: '5432'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: composer:2.10.3
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Extensões que o composer.json deste bot exige.
+          extensions: curl, mbstring, pdo_pgsql, redis
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Install local test services
+        run: |
+          sudo apt-get install -y redis-server
+          bash scripts/quality/check_php_cgi.sh
+          /usr/bin/unshare --version
+          /usr/bin/setpriv --version
+          dpkg-query --show --showformat='${Package} ${Version}\n' util-linux
+          ls -l /usr/bin/unshare /usr/bin/setpriv
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Testar migrations e concorrência PostgreSQL
+        env:
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # DSN por TCP, banco e prefixo das variáveis de banco deste bot.
+          CHATBOTS_PG_TEST_DSN: 'pgsql:host=127.0.0.1;port=5432;dbname=chatbots_test_dealnibot'
+          DEALNI_DB_USER: postgres
+          DEALNI_DB_PASSWORD: test-only
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+        run: composer check:postgres

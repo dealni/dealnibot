@@ -1,0 +1,74 @@
+name: Preparar Node e npm do projeto
+description: Usa os pinos locais e, quando solicitado, instala as dependências.
+
+inputs:
+  install-dependencies:
+    description: Executa npm ci e habilita o cache do npm.
+    required: false
+    default: "true"
+  ignore-scripts:
+    description: >-
+      Passa --ignore-scripts ao npm ci, para o repositório cujo job só precisa
+      das ferramentas de qualidade e não do lifecycle das dependências.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Preparar Node.js antes de fixar o npm
+      if: inputs.install-dependencies == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .node-version
+        # O npm incluído no Node pode divergir de devEngines.
+        # Não consulte o cache antes de instalar o npm do projeto.
+        package-manager-cache: false
+
+    - name: Setup Node.js sem cache
+      if: inputs.install-dependencies != 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .node-version
+        # setup-node v6+ auto-detecta packageManager: npm e ativaria o cache
+        # mesmo sem `cache: npm`; este ramo não instala dependências.
+        package-manager-cache: false
+
+    # A versão sai de package.json#packageManager para não haver um segundo
+    # lugar onde fixar o npm: era ele que divergia entre os workflows.
+    - name: Fixar o npm declarado pelo projeto
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm_version="$(node -p "require('./package.json').packageManager.split('@').at(-1)")"
+        # O bootstrap global não pertence ao projeto; os comandos do
+        # checkout continuam sujeitos ao devEngines e aos lifecycle scripts.
+        cd "${RUNNER_TEMP}"
+        npm install --global "npm@${npm_version}"
+        hash -r
+        test "$(npm --version)" = "$npm_version"
+
+    - name: Restaurar cache com o npm do projeto
+      if: inputs.install-dependencies == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .node-version
+        cache: npm
+
+    # Em jobs com `container:`, o checkout pertence ao usuário do host. O
+    # lifecycle do Lefthook consulta o Git durante o `npm ci`, e versões novas
+    # do Git recusam esse checkout por ownership antes de os testes começarem.
+    - name: Confiar no checkout do job
+      if: inputs.install-dependencies == 'true'
+      shell: bash
+      run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+    - name: Instalar dependências
+      if: inputs.install-dependencies == 'true' && inputs.ignore-scripts != 'true'
+      shell: bash
+      run: npm ci
+
+    - name: Instalar dependências sem lifecycle scripts
+      if: inputs.install-dependencies == 'true' && inputs.ignore-scripts == 'true'
+      shell: bash
+      run: npm ci --ignore-scripts

@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "editorconfig.editorconfig",
+    "tamasfe.even-better-toml",
+    "emilast.LogFileHighlighter",
+    "bmewburn.vscode-intelephense-client",
+    "xdebug.php-debug",
+    "recca0120.vscode-phpunit",
+    "mikestead.dotenv",
+    "william-voyek.vscode-nginx"
+  ]
+}

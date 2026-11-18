@@ -1,0 +1,22 @@
+[Unit]
+Description=Redis exclusivo do DealniBot
+After=network.target
+
+[Service]
+Type=simple
+User=dealnibot
+Group=dealnibot
+ExecStart=/usr/bin/redis-server /etc/dealnibot/redis.conf
+Restart=on-failure
+TimeoutStopSec=60
+UMask=0077
+MemoryHigh=384M
+MemoryMax=512M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dealnibot/redis
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{
+    "$schema": "https://raw.githubusercontent.com/editorconfig-checker/editorconfig-checker/v4.0.1/.editorconfig-checker.schema.json",
+    "Version": "v4.0.1",
+    "Exclude": [
+        "(^|/)vendor/",
+        "(^|/)logs/",
+        "(^|/)\\.artifacts/",
+        "\\.db$",
+        "\\.min\\.(js|css)$"
+    ],
+    "Disable": {
+        "IndentSize": true
+    }
+}

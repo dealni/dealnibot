@@ -1,0 +1,596 @@
+# Regras de análise de fluxo deste bot. Ficam AQUI, no repositório, e não em
+# `--config p/php` da registry do Semgrep, por três motivos:
+#
+#   1. O CI não depende de rede nem de serviço externo para o gate passar.
+#   2. A licença do que roda é a deste repositório; a registry mistura regras
+#      LGPL com regras proprietárias da Semgrep Inc.
+#   3. Regra genérica não conhece `bdTelegram::queryExec()` nem
+#      `bdTelegram::limiteSeguro()`. Estas conhecem.
+#
+# O PHPStan em `max` verifica TIPO. Nenhuma regra daqui é sobre tipo: elas
+# perguntam de onde o dado veio e onde ele foi parar.
+#
+# O gate vale zero achado. Achado novo se resolve no código — NUNCA com um
+# comentário `nosemgrep`, que some da vista igual a fingerprint no
+# .gitleaksignore. Quando a exceção for estrutural (um sanitizador nosso), ela
+# entra como pattern-not-inside ligado ao valor usado, com o nome à vista.
+#
+# NÃO existe regra para `include`/`require` com caminho variável: o bot inteiro é
+# construído sobre inclusão procedural por nome de rota, seriam 35 achados
+# legítimos, e quem cobre esse risco é
+# RoteadorRotasTest::testFuncoesDosScriptsRoteadosSaoSegurasNoPolling, que varre
+# as rotas de verdade.
+# Funções globais têm padrões explícitos com e sem \: o parser PHP do
+# Semgrep distingue as duas formas, inclusive nas combinações aninhadas.
+rules:
+  - id: sql-montado-por-interpolacao
+    languages: [php]
+    severity: ERROR
+    message: >-
+      SQL montado por interpolação ou concatenação. Todo acesso a banco passa por
+      bdTelegram::queryExec($sql, $parametros) com "?" — o segundo argumento
+      existe para isto. LIMIT/OFFSET e ORDER BY não aceitam placeholder e são as
+      únicas interpolações permitidas, desde que passem por limiteSeguro() ou
+      pelo ternário ASC/DESC, que é o que este gate confere.
+    patterns:
+      # Restrinja ao SQL (primeiro argumento), sem considerar o receptor nem
+      # parâmetros preparados. Analise cada variável do SQL separadamente:
+      # um LIMIT seguro não pode esconder outro fragmento vindo de entrada.
+      - pattern-either:
+          - pattern-inside: $CON->queryExec($SQL, ...)
+          - pattern-inside: $CON->query($SQL, ...)
+          - pattern-inside: $CON->exec($SQL)
+          - pattern-inside: $CON->prepare($SQL)
+      # O receptor sintético de \exec() é somente \. Preserve objetos reais.
+      - metavariable-regex:
+          metavariable: $CON
+          regex: '^(?!\\$).+'
+      # Preserve o escopo original: argumento SQL interpolado ou concatenado.
+      - pattern-either:
+          - pattern-inside: $CON->queryExec("...$INTERPOLADO...", ...)
+          - patterns:
+              - pattern-inside: $CON->queryExec($A . $B, ...)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: '.*\$.*'
+          - patterns:
+              - pattern-inside: $CON->queryExec($A . $B, ...)
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: '.*\$.*'
+          - pattern-inside: $CON->query("...$INTERPOLADO...", ...)
+          - patterns:
+              - pattern-inside: $CON->query($A . $B, ...)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: '.*\$.*'
+          - patterns:
+              - pattern-inside: $CON->query($A . $B, ...)
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: '.*\$.*'
+          - pattern-inside: $CON->exec("...$INTERPOLADO...")
+          - patterns:
+              - pattern-inside: $CON->exec($A . $B)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: '.*\$.*'
+          - patterns:
+              - pattern-inside: $CON->exec($A . $B)
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: '.*\$.*'
+          - pattern-inside: $CON->prepare("...$INTERPOLADO...")
+          - patterns:
+              - pattern-inside: $CON->prepare($A . $B)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: '.*\$.*'
+          - patterns:
+              - pattern-inside: $CON->prepare($A . $B)
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: '.*\$.*'
+      - focus-metavariable: $SQL
+      - pattern: $VALOR
+      - metavariable-regex:
+          metavariable: $VALOR
+          regex: '^\$[^\s.\[\](){}>:+*/?,!&|=-]+$'
+      # Só o resultado numérico é seguro; max() sem coerção pode devolver uma
+      # string arbitrária. Os marcadores têm separador e conteúdo literais.
+      - pattern-either:
+          - patterns:
+              - pattern: $VALOR
+              - pattern-not-inside: |
+                  $VALOR = $this->limiteSeguro(...);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(0, intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(1, intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(0, \intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(1, \intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(0, intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(1, intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(0, \intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(1, \intval($ENTRADA));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(0, (int) $ENTRADA);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = max(1, (int) $ENTRADA);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(0, (int) $ENTRADA);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \max(1, (int) $ENTRADA);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = "...";
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = $COND ? "..." : "...";
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = implode(", ", array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = implode(", ", \array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \implode(", ", array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \implode(", ", \array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = implode(",", array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = implode(",", \array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \implode(",", array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \implode(",", \array_fill(..., "?"));
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = $this->marcadores(...);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = $this->filtroDeAreaParaCategorizar(...);
+                  ...
+          # Uma exceção anterior deixa de valer depois de uma reatribuição.
+          # Falhe fechado: mesmo uma segunda atribuição literal deve ser
+          # revista, pois a prova local já não é o sanitizador original.
+          - pattern-inside: |
+              $VALOR = $ANTES;
+              ...
+              $VALOR = $DEPOIS;
+              ...
+          - pattern-inside: |
+              $VALOR = $ANTES;
+              ...
+              $VALOR .= $DEPOIS;
+              ...
+      # Chamadas inline só protegem o próprio argumento.
+      - pattern-not-inside: \implode(", ", \array_fill(..., "?"))
+      - pattern-not-inside: \implode(", ", array_fill(..., "?"))
+      - pattern-not-inside: implode(", ", \array_fill(..., "?"))
+      - pattern-not-inside: implode(", ", array_fill(..., "?"))
+      - pattern-not-inside: \max(1, \intval($ENTRADA))
+      - pattern-not-inside: \max(0, \intval($ENTRADA))
+      - pattern-not-inside: \max(1, intval($ENTRADA))
+      - pattern-not-inside: \max(0, intval($ENTRADA))
+      - pattern-not-inside: max(1, \intval($ENTRADA))
+      - pattern-not-inside: max(0, \intval($ENTRADA))
+      - pattern-not-inside: max(1, intval($ENTRADA))
+      - pattern-not-inside: max(0, intval($ENTRADA))
+      - pattern-not-inside: '$COND ? "..." : "..."'
+      - pattern-not-inside: $this->limiteSeguro(...)
+      - pattern-not-inside: max(0, (int) $ENTRADA)
+      - pattern-not-inside: max(1, (int) $ENTRADA)
+      - pattern-not-inside: \max(0, (int) $ENTRADA)
+      - pattern-not-inside: \max(1, (int) $ENTRADA)
+      - pattern-not-inside: implode(",", array_fill(..., "?"))
+      - pattern-not-inside: implode(",", \array_fill(..., "?"))
+      - pattern-not-inside: \implode(",", array_fill(..., "?"))
+      - pattern-not-inside: \implode(",", \array_fill(..., "?"))
+      - pattern-not-inside: $this->marcadores(...)
+      - pattern-not-inside: $this->filtroDeAreaParaCategorizar(...)
+
+  - id: comando-de-shell-com-variavel
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Comando de shell montado com variável. Use escapeshellarg() em cada
+      argumento — ou não use shell. Uma variável sanitizada não protege outros
+      argumentos crus no mesmo comando.
+    patterns:
+      - pattern-either:
+          - pattern-inside: exec($COMANDO, ...)
+          - pattern-inside: \exec($COMANDO, ...)
+          - pattern-inside: shell_exec($COMANDO)
+          - pattern-inside: \shell_exec($COMANDO)
+          - pattern-inside: system($COMANDO, ...)
+          - pattern-inside: \system($COMANDO, ...)
+          - pattern-inside: passthru($COMANDO, ...)
+          - pattern-inside: \passthru($COMANDO, ...)
+          - pattern-inside: popen($COMANDO, ...)
+          - pattern-inside: \popen($COMANDO, ...)
+          - pattern-inside: proc_open($COMANDO, ...)
+          - pattern-inside: \proc_open($COMANDO, ...)
+      # proc_open aceita argv em array, que não passa por interpretação de
+      # shell. Exija interpolação/concatenação no argumento externo inteiro,
+      # sem procurar concatenações dentro dos elementos daquele array.
+      - pattern-either:
+          - pattern-inside: exec("...$INTERPOLADO...", ...)
+          - pattern-inside: exec($A . $B, ...)
+          - pattern-inside: \exec("...$INTERPOLADO...", ...)
+          - pattern-inside: \exec($A . $B, ...)
+          - pattern-inside: shell_exec("...$INTERPOLADO...")
+          - pattern-inside: shell_exec($A . $B)
+          - pattern-inside: \shell_exec("...$INTERPOLADO...")
+          - pattern-inside: \shell_exec($A . $B)
+          - pattern-inside: system("...$INTERPOLADO...", ...)
+          - pattern-inside: system($A . $B, ...)
+          - pattern-inside: \system("...$INTERPOLADO...", ...)
+          - pattern-inside: \system($A . $B, ...)
+          - pattern-inside: passthru("...$INTERPOLADO...", ...)
+          - pattern-inside: passthru($A . $B, ...)
+          - pattern-inside: \passthru("...$INTERPOLADO...", ...)
+          - pattern-inside: \passthru($A . $B, ...)
+          - pattern-inside: popen("...$INTERPOLADO...", ...)
+          - pattern-inside: popen($A . $B, ...)
+          - pattern-inside: \popen("...$INTERPOLADO...", ...)
+          - pattern-inside: \popen($A . $B, ...)
+          - pattern-inside: proc_open("...$INTERPOLADO...", ...)
+          - pattern-inside: proc_open($A . $B, ...)
+          - pattern-inside: \proc_open("...$INTERPOLADO...", ...)
+          - pattern-inside: \proc_open($A . $B, ...)
+      - focus-metavariable: $COMANDO
+      - pattern: $VALOR
+      - metavariable-regex:
+          metavariable: $VALOR
+          regex: '^\$[^\s.\[\](){}>:+*/?,!&|=-]+$'
+      - pattern-either:
+          - patterns:
+              - pattern: $VALOR
+              - pattern-not-inside: |
+                  $VALOR = escapeshellarg(...);
+                  ...
+              - pattern-not-inside: |
+                  $VALOR = \escapeshellarg(...);
+                  ...
+          - pattern-inside: |
+              $VALOR = $ANTES;
+              ...
+              $VALOR = $DEPOIS;
+              ...
+          - pattern-inside: |
+              $VALOR = $ANTES;
+              ...
+              $VALOR .= $DEPOIS;
+              ...
+      - pattern-not-inside: escapeshellarg(...)
+      - pattern-not-inside: \escapeshellarg(...)
+
+  - id: unserialize-sem-allowed-classes
+    languages: [php]
+    severity: ERROR
+    message: >-
+      unserialize() sem ['allowed_classes' => false] instancia qualquer classe do
+      autoload e dispara __destruct/__wakeup. Prefira json_decode(); se tiver de
+      ser unserialize, passe allowed_classes.
+    patterns:
+      - pattern-either:
+          - pattern: unserialize($DADOS)
+          - pattern: \unserialize($DADOS)
+      - pattern-not: unserialize($DADOS, ['allowed_classes' => false])
+      - pattern-not: \unserialize($DADOS, ['allowed_classes' => false])
+      - pattern-not: unserialize($DADOS, ['allowed_classes' => [...]])
+      - pattern-not: \unserialize($DADOS, ['allowed_classes' => [...]])
+
+  - id: segredo-comparado-sem-hash-equals
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Segredo ou digest comparado com == / === / strcmp. A comparação sai no
+      primeiro byte diferente e o tempo de resposta entrega o prefixo correto,
+      byte a byte. Use hash_equals($esperado, $recebido).
+    patterns:
+      - pattern-either:
+          - pattern: $X === TELEGRAM_WEBHOOK_SECRET
+          - pattern: TELEGRAM_WEBHOOK_SECRET === $X
+          - pattern: $X == TELEGRAM_WEBHOOK_SECRET
+          - pattern: TELEGRAM_WEBHOOK_SECRET == $X
+          - pattern-either:
+              - pattern: strcmp($X, TELEGRAM_WEBHOOK_SECRET)
+              - pattern: \strcmp($X, TELEGRAM_WEBHOOK_SECRET)
+          - pattern-either:
+              - pattern: strcmp(TELEGRAM_WEBHOOK_SECRET, $X)
+              - pattern: \strcmp(TELEGRAM_WEBHOOK_SECRET, $X)
+          - pattern-either:
+              - pattern: $X === hash_hmac(...)
+              - pattern: $X === \hash_hmac(...)
+          - pattern-either:
+              - pattern: hash_hmac(...) === $X
+              - pattern: \hash_hmac(...) === $X
+          - pattern-either:
+              - pattern: $X == hash_hmac(...)
+              - pattern: $X == \hash_hmac(...)
+          - pattern-either:
+              - pattern: hash_hmac(...) == $X
+              - pattern: \hash_hmac(...) == $X
+          - pattern-either:
+              - pattern: $X === hash(...)
+              - pattern: $X === \hash(...)
+          - pattern-either:
+              - pattern: hash(...) === $X
+              - pattern: \hash(...) === $X
+          - pattern-either:
+              - pattern: $X === md5(...)
+              - pattern: $X === \md5(...)
+          - pattern-either:
+              - pattern: md5(...) === $X
+              - pattern: \md5(...) === $X
+          - pattern-either:
+              - pattern: $X === sha1(...)
+              - pattern: $X === \sha1(...)
+          - pattern-either:
+              - pattern: sha1(...) === $X
+              - pattern: \sha1(...) === $X
+          # A configuração de produção também pode vir do ambiente. Restrinja
+          # o nome a variáveis que carregam segredo para não denunciar as
+          # comparações normais de APP_ENV/CI com `false` ou valores de estado.
+          - patterns:
+              - pattern-either:
+                  - pattern-either:
+                      - pattern: $X === getenv($NOME)
+                      - pattern: $X === \getenv($NOME)
+                  - pattern-either:
+                      - pattern: getenv($NOME) === $X
+                      - pattern: \getenv($NOME) === $X
+                  - pattern-either:
+                      - pattern: $X == getenv($NOME)
+                      - pattern: $X == \getenv($NOME)
+                  - pattern-either:
+                      - pattern: getenv($NOME) == $X
+                      - pattern: \getenv($NOME) == $X
+                  - pattern-either:
+                      - pattern: strcmp($X, getenv($NOME))
+                      - pattern: strcmp($X, \getenv($NOME))
+                      - pattern: \strcmp($X, getenv($NOME))
+                      - pattern: \strcmp($X, \getenv($NOME))
+                  - pattern-either:
+                      - pattern: strcmp(getenv($NOME), $X)
+                      - pattern: strcmp(\getenv($NOME), $X)
+                      - pattern: \strcmp(getenv($NOME), $X)
+                      - pattern: \strcmp(\getenv($NOME), $X)
+              - metavariable-regex:
+                  metavariable: $NOME
+                  regex: ^["'](?i:[a-z0-9_-]*(secret|token|password|api[_-]?key|private[_-]?key)[a-z0-9_-]*)["']$
+              - pattern-not: getenv($NOME) === false
+              - pattern-not: \getenv($NOME) === false
+              - pattern-not: false === getenv($NOME)
+              - pattern-not: false === \getenv($NOME)
+              - pattern-not: getenv($NOME) == false
+              - pattern-not: \getenv($NOME) == false
+              - pattern-not: false == getenv($NOME)
+              - pattern-not: false == \getenv($NOME)
+              - pattern-not: getenv($NOME) === ''
+              - pattern-not: \getenv($NOME) === ''
+              - pattern-not: "'' === getenv($NOME)"
+              - pattern-not: "'' === \\getenv($NOME)"
+              - pattern-not: getenv($NOME) == ''
+              - pattern-not: \getenv($NOME) == ''
+              - pattern-not: "'' == getenv($NOME)"
+              - pattern-not: "'' == \\getenv($NOME)"
+              - pattern-not: getenv($NOME) === null
+              - pattern-not: \getenv($NOME) === null
+              - pattern-not: null === getenv($NOME)
+              - pattern-not: null === \getenv($NOME)
+              - pattern-not: getenv($NOME) == null
+              - pattern-not: \getenv($NOME) == null
+              - pattern-not: null == getenv($NOME)
+              - pattern-not: null == \getenv($NOME)
+          # Cubra a forma usual em que o segredo do ambiente é guardado numa
+          # variável antes da comparação, mas mantenha o mesmo filtro de nome.
+          - patterns:
+              - pattern-either:
+                  - pattern: $X === $SEGREDO
+                  - pattern: $SEGREDO === $X
+                  - pattern: $X == $SEGREDO
+                  - pattern: $SEGREDO == $X
+                  - pattern-either:
+                      - pattern: strcmp($X, $SEGREDO)
+                      - pattern: \strcmp($X, $SEGREDO)
+                  - pattern-either:
+                      - pattern: strcmp($SEGREDO, $X)
+                      - pattern: \strcmp($SEGREDO, $X)
+              - pattern-either:
+                  - pattern-inside: |
+                      $SEGREDO = getenv($NOME);
+                      ...
+                  - pattern-inside: |
+                      $SEGREDO = \getenv($NOME);
+                      ...
+              - metavariable-regex:
+                  metavariable: $NOME
+                  regex: ^["'](?i:[a-z0-9_-]*(secret|token|password|api[_-]?key|private[_-]?key)[a-z0-9_-]*)["']$
+              - pattern-not: $SEGREDO === false
+              - pattern-not: false === $SEGREDO
+              - pattern-not: $SEGREDO == false
+              - pattern-not: false == $SEGREDO
+              - pattern-not: $SEGREDO === ''
+              - pattern-not: "'' === $SEGREDO"
+              - pattern-not: $SEGREDO == ''
+              - pattern-not: "'' == $SEGREDO"
+              - pattern-not: $SEGREDO === null
+              - pattern-not: null === $SEGREDO
+              - pattern-not: $SEGREDO == null
+              - pattern-not: null == $SEGREDO
+
+  - id: curl-sem-verificar-certificado
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Verificação de certificado TLS desligada no cURL. A chamada passa a aceitar
+      qualquer certificado, inclusive o de quem estiver no meio — e por estas
+      conexões passam token do bot e chave de provedor de pagamento.
+    patterns:
+      - pattern-either:
+          - pattern-either:
+              - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false)
+              - pattern: \curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false)
+          - pattern-either:
+              - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, 0)
+              - pattern: \curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, 0)
+          - pattern-either:
+              - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, 0)
+              - pattern: \curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, 0)
+          - pattern-either:
+              - pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, false)
+              - pattern: \curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, false)
+          - pattern-either:
+              - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYPEER => false, ...])
+              - pattern: \curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYPEER => false, ...])
+          - pattern-either:
+              - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYPEER => 0, ...])
+              - pattern: \curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYPEER => 0, ...])
+          - pattern-either:
+              - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYHOST => false, ...])
+              - pattern: \curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYHOST => false, ...])
+          - pattern-either:
+              - pattern: curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYHOST => 0, ...])
+              - pattern: \curl_setopt_array($CH, [..., CURLOPT_SSL_VERIFYHOST => 0, ...])
+          # Forma de atribuição: desde 2026-08-25 o Telegram.php monta as
+          # opções num array e aplica com curl_setopt_array($ch, $opcoes), para
+          # que a suíte consiga afirmá-las sem rede. Sem os quatro padrões
+          # abaixo a regra deixaria de ver justamente esse arquivo.
+          - pattern: $OPCOES[CURLOPT_SSL_VERIFYPEER] = false;
+          - pattern: $OPCOES[CURLOPT_SSL_VERIFYPEER] = 0;
+          - pattern: $OPCOES[CURLOPT_SSL_VERIFYHOST] = false;
+          - pattern: $OPCOES[CURLOPT_SSL_VERIFYHOST] = 0;
+
+  - id: aleatorio-fraco-para-segredo
+    languages: [php]
+    severity: ERROR
+    message: >-
+      rand()/mt_rand()/uniqid() são previsíveis e não servem para token, segredo
+      nem chave que alguém possa querer adivinhar. Use random_bytes() ou
+      random_int().
+    patterns:
+      - pattern-either:
+          - pattern-either:
+              - pattern: $VAR = rand(...);
+              - pattern: $VAR = \rand(...);
+          - pattern-either:
+              - pattern: $VAR = mt_rand(...);
+              - pattern: $VAR = \mt_rand(...);
+          - pattern-either:
+              - pattern: $VAR = uniqid(...);
+              - pattern: $VAR = \uniqid(...);
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(token|secret|segredo|chave|key|nonce|senha|password).*
+
+  - id: entrada-da-requisicao-vira-caminho-de-arquivo
+    languages: [php]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Caminho de arquivo montado com dado da requisição. Isso lê ou escreve onde
+      o remetente mandar — ../../inclusos/config.php inclusive. Valide contra uma
+      lista fechada antes de tocar no disco.
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+    pattern-sinks:
+      - pattern-either:
+          - pattern-either:
+              - pattern: file_get_contents($SINK, ...)
+              - pattern: \file_get_contents($SINK, ...)
+          - pattern-either:
+              - pattern: file_put_contents($SINK, ...)
+              - pattern: \file_put_contents($SINK, ...)
+          - pattern-either:
+              - pattern: fopen($SINK, ...)
+              - pattern: \fopen($SINK, ...)
+          - pattern-either:
+              - pattern: unlink($SINK)
+              - pattern: \unlink($SINK)
+          - pattern-either:
+              - pattern: rename($SINK, ...)
+              - pattern: \rename($SINK, ...)
+          - pattern-either:
+              - pattern: copy($SINK, ...)
+              - pattern: \copy($SINK, ...)
+          - pattern-either:
+              - pattern: mkdir($SINK, ...)
+              - pattern: \mkdir($SINK, ...)
+    pattern-sanitizers:
+      # `basename()` só remove separadores de diretório; não restringe o nome
+      # a uma lista fechada e portanto não é sanitizador de caminho.
+      - pattern: (int) $X
+      - pattern-either:
+          - pattern: intval(...)
+          - pattern: \intval(...)
+      # `preg_replace()` NÃO é sanitizador por si só: a segurança depende do
+      # regex. A fixture passa por uma substituição inofensiva antes do sink
+      # justamente para impedir que esta exceção genérica volte.
+
+  - id: entrada-da-requisicao-impressa-sem-escape
+    languages: [php]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Dado da requisição impresso sem escape. index.php, webhook.php e os
+      webhooks de pagamento respondem HTTP; eco de entrada crua é XSS refletido.
+    # $_SERVER fica FORA das fontes de propósito: em CLI ele carrega o argv, e
+    # todo script de linha de comando daqui imprime o próprio argumento. Incluí-lo
+    # transformava scripts/quality/check_coverage.php e processos/testar_*.php em
+    # "XSS", que é o tipo de achado que ensina a ignorar a ferramenta.
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+    pattern-sinks:
+      - pattern-either:
+          - pattern: echo $SINK;
+          - pattern: print $SINK;
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: \htmlspecialchars(...)
+      - pattern-either:
+          - pattern: htmlentities(...)
+          - pattern: \htmlentities(...)
+      # JSON/URL encoding não é escape para o contexto HTML. Só os dois
+      # escapes HTML acima (ou uma coerção numérica) encerram o fluxo.
+      - pattern: (int) $X
+      - pattern-either:
+          - pattern: intval(...)
+          - pattern: \intval(...)

@@ -1,0 +1,10 @@
+[Unit]
+Description=Verifica recência do snapshot diário de dealnibot a cada hora
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+Unit=dealnibot-snapshot-recencia.service
+
+[Install]
+WantedBy=timers.target

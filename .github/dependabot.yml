@@ -1,0 +1,86 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 5
+    groups:
+      npm-development:
+        dependency-type: development
+
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 5
+    groups:
+      composer-patches:
+        update-types: [patch]
+
+  - package-ecosystem: composer
+    directory: "/tools/phpcpd"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # O bloco acima NÃO cobre esta entrada: com `directory: "/"` o Dependabot
+  # varre `/.github/workflows` e o `action.yml` da raiz, e não
+  # `.github/actions/*` (dependabot-core#6704). Sem esta segunda entrada o SHA
+  # que mora dentro da composite action fica congelado — o mesmo congelamento
+  # que a entrada de github-actions existe para evitar. O portão
+  # `check:composite-actions` reprova se um diretório de action ficar de fora.
+  - package-ecosystem: github-actions
+    directory: "/.github/actions/setup-node"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/.github/actions/setup-postgres"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]

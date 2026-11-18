@@ -1,0 +1,17 @@
+{
+    "name": "dealni/ferramenta-phpcpd",
+    "description": "Detector de cópia/colagem, isolado do composer.json do bot.",
+    "license": "proprietary",
+    "type": "project",
+    "require": {
+        "php": ">=8.5.12 <8.6"
+    },
+    "require-dev": {
+        "systemsdk/phpcpd": "^9.2"
+    },
+    "config": {
+        "platform": {
+            "php": "8.5.12"
+        }
+    }
+}

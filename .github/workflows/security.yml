@@ -1,0 +1,175 @@
+name: security
+
+on:
+  # Pull requests validam mudanças antes da integração. O gatilho de push
+  # cobre os commits que entram em main.
+  push:
+    branches: [main]
+  pull_request:
+  # Varredura semanal: advisory novo aparece sem depender de alguem commitar.
+  # Segunda de madrugada (UTC), com o minuto proprio de cada repositorio para as
+  # bases nao disputarem a fila do Actions no mesmo instante.
+  schedule:
+    # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+    - cron: "27 5 * * 1"
+    # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # O schedule usa a ref default (main); incluir o evento impede um push na
+  # mesma ref de cancelar a varredura semanal antes de ela terminar.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar Node.js, npm e dependências
+        uses: ./.github/actions/setup-node
+        with:
+          ignore-scripts: "true"
+      - name: Enforce npm dependency license policy
+        run: npm run check:licenses
+      - name: Audit npm dependencies
+        run: npm run check:vulnerabilities
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: composer:2.10.3
+          # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
+          # Extensões que o composer.json deste bot exige.
+          extensions: curl, mbstring, pdo_pgsql, redis
+          # --- FIM DOS DADOS; daqui para baixo o código é canônico --------------------
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      # Sem este passo, uma extensão declarada no composer.json e ausente do
+      # runner só apareceria quando algum gate posterior quebrasse por motivo
+      # que não parece ser esse.
+      - name: Check platform requirements
+        run: composer check-platform-reqs --no-interaction
+      - name: Test quality tooling contracts
+        run: npm run test:quality-tools
+      # O comando audita o lock principal e o lock isolado do PHPCPD.
+      - name: Audit dependencies
+        run: composer check:vulnerabilities
+
+  gitleaks:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # fetch-depth 0 porque a varredura é do HISTÓRICO INTEIRO, não do diff
+          # do push: chave commitada e apagada no commit seguinte continua
+          # válida no provedor e continua legível por quem clonou.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: none
+          coverage: none
+        env:
+          fail-fast: true
+      # Binário oficial (MIT) em vez da gitleaks-action. A ação é licenciada
+      # pela Gitleaks LLC, executa um dist/index.js fechado e exige GITHUB_TOKEN;
+      # aqui a versão fica pinada e o tarball é conferido por SHA-256 antes de
+      # ser executado — mesma disciplina do pin por SHA das actions acima.
+      - name: Install gitleaks
+        env:
+          # Versão fixada aqui e conferida por SHA-256. A suposta regressão de
+          # 8.30.1 (gitleaks/gitleaks#2170) era o token do relator caindo na
+          # stopword `abcdefghijklmnopqrstuvwxyz`; o binário oficial linux_x64
+          # detecta o canário abaixo. O tarball continua verificado por SHA-256.
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar xzf gitleaks.tar.gz gitleaks
+          test "$(./gitleaks version)" = "${GITLEAKS_VERSION}"
+      # Smoke test do detector: uma versão aprovada precisa disparar a regra
+      # padrão de GitHub PAT (o valor evita as stopwords do config padrão). O valor é sintético e o log é
+      # descartado; as partes separadas também não parecem um segredo no YAML.
+      - name: Verify gitleaks detector
+        run: |
+          set -euo pipefail
+          probe_prefix='ghp_'
+          probe_suffix='4gK9mQ2xV7pL5zR8cN1tS6hD3wF0yJbUeA7s'
+          set +e
+          printf 'probe = "%s%s"\n' "${probe_prefix}" "${probe_suffix}" \
+            | ./gitleaks stdin --redact --no-banner --log-level warn >/dev/null 2>&1
+          probe_rc=$?
+          set -e
+          test "${probe_rc}" -eq 1
+      # --redact para o log público do Actions nunca imprimir o valor achado.
+      # `--all --full-history` porque sem isso a varredura segue só a linha
+      # alcançável do checkout: commit que ficou em branch abandonada, ou que
+      # saiu da linha principal num rebase, continua clonável e continua com o
+      # valor dentro.
+      # As regras específicas e as exceções para falsos positivos ficam em
+      # .gitleaks.toml. O job reprova se detectar um segredo.
+      - name: Scan full history
+        run: ./gitleaks git . --log-opts='--all --full-history' --redact --no-banner --log-level warn
+
+  semgrep:
+    name: Dataflow analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEMGREP_VERSION: '1.182.1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          tools: none
+          coverage: none
+        env:
+          fail-fast: true
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+      # Semgrep OSS (LGPL-2.1), versão fixa, num venv próprio. As regras são as
+      # de tools/quality/semgrep/project/php.yaml: nada é baixado da registry, então o gate não
+      # depende de rede nem de conta em serviço nenhum.
+      - name: Install Semgrep
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/semgrep"
+          "${RUNNER_TEMP}/semgrep/bin/pip" install --quiet "semgrep==${SEMGREP_VERSION}"
+          echo "${RUNNER_TEMP}/semgrep/bin" >> "${GITHUB_PATH}"
+      # A asserção compara a versão instalada com a fixada: `semgrep --version`
+      # sozinho só prova que ALGUM semgrep está no PATH, e um venv que resolveu
+      # outra versão passaria despercebido mudando o conjunto de achados.
+      - name: Assert Semgrep is on PATH and pinned
+        run: test "$(semgrep --version)" = "${SEMGREP_VERSION}"
+      # O script roda o autoteste das regras (tools/quality/semgrep/project/fixtures/) antes da
+      # varredura: regra que parou de disparar reprova aqui, e não vira um
+      # "0 achados" que parece código limpo.
+      - name: Run rules
+        run: php scripts/quality/run_semgrep.php

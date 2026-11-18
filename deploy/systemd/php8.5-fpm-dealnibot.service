@@ -1,0 +1,35 @@
+[Unit]
+Description=PHP-FPM exclusivo do dealnibot
+After=network.target bots-redis-isolation.service postgresql@16-main.service
+Requires=bots-redis-isolation.service
+Requires=postgresql@16-main.service
+
+[Service]
+ExecStartPre=/usr/bin/pg_isready -q -h 127.0.0.1 -p 5432
+Type=notify
+EnvironmentFile=/etc/dealnibot/fpm.environment
+ExecStart=/usr/sbin/php-fpm8.5 --nodaemonize --fpm-config /etc/php/8.5/fpm/dealnibot-master.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=php8.5-fpm-dealnibot
+LogsDirectory=php8.5-fpm-dealnibot
+UMask=0027
+MemoryHigh=512M
+MemoryMax=768M
+TasksMax=128
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+ReadWritePaths=/run/php /var/log/php8.5-fpm-dealnibot /var/www/dealnibot/logs
+
+[Install]
+WantedBy=multi-user.target

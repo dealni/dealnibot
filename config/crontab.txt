@@ -1,0 +1,66 @@
+# DealniBot — modelo do cron, formato /etc/cron.d
+#
+# Instalar como /etc/cron.d/dealnibot (arquivo do sistema, com campo de USUÁRIO na
+# 6ª coluna). Não usar `crontab -u www-data`: aquele formato não tem campo de
+# usuário, é invisível no git e o instalador substituiria o crontab inteiro do
+# usuário.
+#
+# Este bot tem três jobs: replay da inbox, snapshot do banco e o monitor de
+# saúde. Todos usam o mesmo EnvironmentFile do FPM/systemd e passam pelo
+# wrapper de alerta avisar_se_falhar.sh.
+
+# Os locks são ARQUIVOS regulares em /var/lib/dealnibot/cron/ (dono dealnibot,
+# modo 0600), criados no host antes de instalar este arquivo: o wrapper recusa
+# criar o caminho e recusa symlink.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# 5h10 no horário oficial do bot, independentemente do fuso configurado no
+# host. Os nomes dos snapshots continuam em UTC (o script usa gmdate()).
+CRON_TZ=America/Sao_Paulo
+# Sem MAILTO declarado, o cron manda e-mail ao dono do job a CADA saída — em
+# stdout ou stderr. Os workers de minuto imprimem o resumo de cada rodada:
+# 1.440 e-mails/dia para o usuário do bot. Caixa lotada não é só desperdício: é
+# onde o e-mail de uma falha REAL passa despercebido.
+#
+# O arranjo abaixo é: MAILTO declarado + `>/dev/null` em cada job. O stdout de
+# rotina some; o **stderr continua indo por e-mail**, e é por ele que a falha
+# aparece — em CLI o STDERR JSON do Monolog fica sempre ligado, mesmo com
+# LOGS_ATIVO desligada. Trocar por MAILTO="" desliga também o aviso de falha;
+# se for esse o desejo, é decisão explícita, não o padrão.
+MAILTO=root
+
+# Os jobs carregam /etc/dealnibot/environment pelo wrapper versionado. Assim
+# cron, FPM e systemd usam o mesmo contrato e não há valores duplicados aqui.
+#
+# O e-mail de MAILTO depende da configuração do host. O wrapper envia alertas
+# e recuperações ao chat de DEALNI_ALERTA_CHAT_ID. Sem a variável no
+# environment, o aviso pelo Telegram fica desligado.
+# Lock ocupado é recusado antes, pelo wrapper de ambiente: o `flock --nonblock`
+# sai com código 1 sem mensagem, então não vai nem ao MAILTO nem ao Telegram.
+
+# REPLAY DO WEBHOOK — retenta updates que falharam depois do ACK. O lock evita
+# sobreposição se algum comando consumir quase toda a janela do cron.
+* * * * * dealnibot /var/www/dealnibot/scripts/operacao/executar_com_ambiente.sh --lock-nonblocking /var/lib/dealnibot/cron/webhook-inbox.lock /var/www/dealnibot/scripts/operacao/avisar_se_falhar.sh webhook-inbox --php /var/www/dealnibot/processos/processar_webhook_inbox.php >/dev/null
+
+# SNAPSHOT DO BANCO — pg_dump + rotação, sem enviar nada a lugar nenhum.
+# Este job gera uma cópia local do banco PostgreSQL. O diretório de snapshots precisa
+# ser do usuário dealnibot (o instalador cria o padrão, <checkout>/snapshots,
+# porque a raiz do checkout é do root). O lock é o snapshot.lock abaixo, fora
+# de /tmp e do checkout. O --lock-nonblocking faz uma segunda invocação sair
+# na hora, em vez de correr em paralelo ou ficar pendurada indefinidamente.
+#
+# O script imprime o caminho do snapshot no STDOUT e só usa o STDERR na falha:
+# com o `>/dev/null` abaixo, um snapshot bem-sucedido fica silencioso e a falha
+# chega por e-mail ao destinatário declarado acima, com o código de saída
+# preservado. Sucesso e falha também ficam no canal `snapshot_banco` do log.
+# Nenhum `%` entra na linha, então também não há o escape de crontab(5) que
+# transformava um erro de sintaxe em e-mail diário.
+#
+# Ajuste o horário se a instalação tiver outras rotinas de backup.
+10 5 * * * dealnibot /usr/local/libexec/vps-backup-maintenance.py shared 2700 /var/www/dealnibot/scripts/operacao/executar_com_ambiente.sh --lock-nonblocking /var/lib/dealnibot/cron/snapshot.lock /var/www/dealnibot/scripts/operacao/avisar_se_falhar.sh snapshot --php /var/www/dealnibot/processos/snapshot_banco.php >/dev/null
+
+# ALERTA ÚNICO — /health e /ready consultados a cada 5 minutos; falha e
+# recuperação saem em stderr e, pelo avisar_se_falhar.sh, no Telegram. O script
+# e o aviso limitam repetições da mesma falha a uma por hora.
+*/5 * * * * dealnibot /var/www/dealnibot/scripts/operacao/executar_com_ambiente.sh /var/www/dealnibot/scripts/operacao/avisar_se_falhar.sh monitor-saude /var/www/dealnibot/scripts/operacao/monitorar_saude.sh >/dev/null

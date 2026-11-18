@@ -1,0 +1,25 @@
+{
+  "name": "chatbot-quality-tools",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@12.2.1",
+  "engines": {
+    "node": ">=24.22.1 <25",
+    "npm": ">=12.2.1 <13"
+  },
+  "scripts": {
+    "prepare": "lefthook install --reset-hooks-path",
+    "test:quality-tools": "node --test --test-concurrency=1 scripts/quality/check_padronizacao.test.mjs scripts/quality/check_npm_licenses.test.mjs scripts/quality/check_composite_actions.test.mjs scripts/quality/check_commitlint.test.mjs scripts/quality/check_setup_node.test.mjs scripts/quality/check_redis_macos.test.mjs scripts/quality/check_redis_linux.test.mjs scripts/quality/check_worker_timestamp.test.mjs scripts/quality/check_redis_autenticacao.test.mjs scripts/quality/check_infra_padronizada.test.mjs scripts/quality/check_with_local_config.test.mjs scripts/quality/pre-push.test.mjs scripts/quality/check_staged_index.test.mjs scripts/quality/check_publicacao.test.mjs scripts/quality/check_publicacao_operacao.test.mjs scripts/quality/check_recuperacao.test.mjs scripts/quality/check_composer_padronizado.test.mjs scripts/quality/check_ordem_gates.test.mjs scripts/quality/check_publicacao_dependencias.test.mjs scripts/quality/validation-evidence.test.mjs scripts/quality/validation-environment.test.mjs scripts/quality/validation-recovery.test.mjs scripts/quality/validation-bindings.test.mjs",
+    "check:composite-actions": "node scripts/quality/check_composite_actions.mjs",
+    "check:licenses": "node scripts/quality/check_npm_licenses.mjs",
+    "check:vulnerabilities": "npm audit --audit-level=high"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
+    "lefthook": "2.2.2"
+  },
+  "allowScripts": {
+    "lefthook": false
+  }
+}

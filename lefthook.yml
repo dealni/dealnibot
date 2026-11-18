@@ -1,0 +1,30 @@
+# Hooks deste repositório. O script de staged preserva as travas rápidas de
+# caminhos proibidos, segredos, sintaxe, Composer e links de documento; os
+# portões de workflow saíram dele junto com o CI bloqueado por cobrança.
+
+# Use sempre o binário travado no package-lock.
+lefthook: ./node_modules/.bin/lefthook
+assert_lefthook_installed: true
+min_version: 2.1.12
+
+pre-commit:
+  jobs:
+    - name: arquivos-no-stage
+      run: bash scripts/quality/check_staged.sh
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npm exec --offline -- commitlint --edit "{1}"
+
+# O pre-push continua sendo a validação real deste repositório: o `check:all`
+# roda inteiro aqui, inclusive testes, Semgrep, gitleaks e complexidade.
+# O agregado executa a suíte normal integral uma vez.
+pre-push:
+  # O stdin real do Git identifica os SHAs; o wrapper exige checkout limpo,
+  # valida HEAD antes/depois dos gates e mantém CI=1. Exclusão isolada dispensa gates.
+  jobs:
+    - name: qualidade
+      use_stdin: true
+      script: qualidade.sh
+      runner: sh

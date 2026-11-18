@@ -1,0 +1,18 @@
+[Unit]
+Description=Verificação de integridade e recência do snapshot diário de dealnibot
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=dealnibot
+Group=dealnibot
+WorkingDirectory=/var/www/dealnibot
+EnvironmentFile=/etc/dealnibot/environment
+ExecStart=/var/www/dealnibot/scripts/operacao/executar_com_ambiente.sh /var/www/dealnibot/scripts/operacao/avisar_se_falhar.sh snapshot-recencia --php /var/www/dealnibot/scripts/operacao/verificar_snapshot_recente.php
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dealnibot /var/www/dealnibot/logs

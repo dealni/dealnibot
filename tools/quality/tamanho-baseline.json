@@ -1,0 +1,16 @@
+{
+    "linhas_de_funcao": {
+        "limite": 150,
+        "arquivos_medidos": 96,
+        "excecoes": [],
+        "medido_em": "2026-11-18"
+    },
+    "tamanho": {
+        "limite_linhas": 500,
+        "limite_complexidade": 15,
+        "arquivos_medidos": 96,
+        "excecoes_de_arquivo": [],
+        "excecoes_de_funcao": [],
+        "medido_em": "2026-11-18"
+    }
+}

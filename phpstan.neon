@@ -1,0 +1,74 @@
+includes:
+    # O phpstan/extension-installer NÃO está instalado de propósito: ele liga
+    # extensão por efeito colateral do `composer install`, e aqui a lista de
+    # regras em vigor tem que estar escrita em algum lugar que se leia.
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    # NÃO existe mais phpstan-baseline.neon aqui. Havia uma, com 69 blocos (122
+    # apontamentos), criada em 2026-08-01 quando as três extensões entraram — a
+    # regra era "não piore": erro NOVO reprovava, os antigos ficavam calados. Em
+    # 2026-08-18 os 122 foram corrigidos no código, um a um, e o arquivo foi
+    # removido. Fora das exceções declaradas neste arquivo, QUALQUER apontamento
+    # reprova. Recriar uma baseline para calar um erro é o mesmo que abaixar o
+    # piso de cobertura: conserte o código.
+
+parameters:
+    level: max
+    parallel:
+        maximumNumberOfProcesses: 2
+    phpVersion: 80512
+    # Evita corrida entre os quatro repos: o padrão global em /tmp permite que
+    # uma análise remova o container compilado que outra ainda está carregando.
+    tmpDir: vendor/.phpstan-cache
+    reportUnmatchedIgnoredErrors: true
+    # Exceção inline precisa usar identificador e explicar o motivo. Além de
+    # tornar a dívida revisável, isto proíbe os genéricos @phpstan-ignore-line.
+    reportIgnoresWithoutComments: true
+    ignoreErrors:
+        # Métodos de asserção do PHPUnit são estáticos por API, mas a forma
+        # documentada nos TestCase é `$this->assert*()`. A exceção fica só em
+        # tests/; no código de produção a strict-rule continua ativa.
+        -
+            identifier: staticMethod.dynamicCall
+            path: tests/*
+    bootstrapFiles:
+        - tools/phpstan/bootstrap.php
+    paths:
+        - .
+    excludePaths:
+        - vendor
+        # inclusos/config.php é GITIGNORADO: existe nesta máquina e não existe no
+        # CI. Analisá-lo fazia o PHPStan resolver constante de credencial para o
+        # valor REAL aqui e para outro lá — duas análises diferentes do mesmo
+        # commit — e, pior, colocava um pedaço do valor real dentro da mensagem de
+        # erro, que ia parar no phpstan-baseline.neon versionado. Quem fornece
+        # valor fictício para essas constantes é tools/phpstan/bootstrap.php.
+        - inclusos/config.php (?)
+        # O `(?)` marca o caminho como OPCIONAL e é obrigatório aqui: logs/
+        # é gitignorado, então existe nesta máquina mas NÃO em um checkout
+        # limpo (CI). Sem o marcador o PHPStan aborta com "Invalid entries in
+        # excludePaths" antes de analisar qualquer arquivo, e o gate inteiro
+        # (PHPStan + cs-fixer + cobertura) deixa de rodar.
+        - logs (?)
+        # Violações de propósito, uma por regra do Semgrep. Analisá-las seria
+        # pedir ao PHPStan que confirmasse que código errado está errado.
+        - tools/quality/semgrep/project/fixtures
+        # O phpcpd tem vendor próprio; `(?)` porque é gitignorado e não existe
+        # num checkout limpo, exatamente como logs/ acima.
+        - tools/phpcpd/vendor (?)
+    # Constante de feature flag: o valor varia por ambiente, então o PHPStan
+    # não deve constatar "sempre verdadeiro/falso" a partir do valor local de
+    # inclusos/dados_bot.php. LOGS_ATIVO é lida por inclusos/TelegramErrorLogger.php
+    # e o comportamento nos dois valores está coberto por TelegramErrorLoggerTest.
+    dynamicConstantNames:
+        - LOGS_ATIVO
+        # TOKEN_BOT e OPENROUTER_API_KEY vêm de inclusos/config.php, que está fora da
+        # análise (gitignorado). Quem as define para o PHPStan é o valor fictício
+        # de tools/phpstan/bootstrap.php — e sem esta lista o analisador tratava
+        # esse valor como O valor, declarando "sempre verdadeiro/falso" em teste
+        # que verifica, em processo isolado, o que carregarConfiguracaoSensivel()
+        # define em RUNTIME. O erro era do analisador, não da asserção.
+        - OPENROUTER_API_KEY
+        - TOKEN_BOT

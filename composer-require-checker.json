@@ -1,0 +1,31 @@
+{
+    "php-core-extensions": [
+        "Core",
+        "date",
+        "json",
+        "hash",
+        "pcre",
+        "Phar",
+        "Reflection",
+        "SPL",
+        "random",
+        "standard"
+    ],
+    "scan-files": [
+        "comandos/**/*.php",
+        "config/**/*.php",
+        "inclusos/**/*.php",
+        "processos/**/*.php",
+        "scripts/deploy/**/*.php",
+        "scripts/operacao/**/*.php",
+        "bot.php",
+        "bot_web.php",
+        "health.php",
+        "index.php",
+        "ready.php",
+        "roteador.php"
+    ],
+    "symbol-whitelist": [
+        "fastcgi_finish_request"
+    ]
+}

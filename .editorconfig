@@ -1,0 +1,38 @@
+# Convenções de arquivo para o editor.
+#
+# Isto NÃO é um gate: quem reprova estilo aqui é o php-cs-fixer (`composer
+# format:check`, regra @PSR12), e ele não lê este arquivo; o
+# editorconfig-checker (`composer check:editorconfig`) só confere que a árvore o
+# respeita. O papel do EditorConfig é evitar que o editor introduza a
+# divergência — indentação com tabulação, CRLF, arquivo sem quebra final —
+# antes de o gate rodar, para o diff não misturar mudança de verdade com ruído
+# de whitespace.
+#
+# Só há seção para linguagem presente na árvore: regra para extensão que não
+# existe aqui é combinada que ninguém confere.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# PSR-12 exige 4 espaços; o php-cs-fixer reprova qualquer outra coisa.
+[*.php]
+indent_size = 4
+
+# Em Markdown, dois espaços no fim da linha são quebra de linha significativa.
+# Nenhum formatador toca `*.md` aqui, então esta é a única proteção contra o
+# editor comer a quebra.
+[*.md]
+trim_trailing_whitespace = false
+
+# Sem regra de propósito: manifests Composer de repositórios diferentes podem
+# usar tamanhos distintos. Fixar um tamanho aqui faria o editor reindentar o
+# arquivo inteiro na primeira edição.
+[composer.json]
+indent_size = unset
