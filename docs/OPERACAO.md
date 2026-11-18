@@ -52,6 +52,25 @@ composer install -d tools/phpcpd              # PHPCPD
 
 gitleaks ausente reprova tanto no pre-commit quanto no `check:all`.
 
+## Aviso de encerramento no Telegram
+
+O [serviço systemd do aviso](../deploy/systemd/dealnibot-aviso-encerramento.service)
+executa apenas `responder_encerramento.php`. Ele responde a mensagens privadas
+enviadas por pessoas após a primeira ativação e ignora grupos, canais, edições,
+eventos de serviço e atualizações anteriores. Usa a API do Telegram por long
+polling, sem webhook, banco de dados, Redis ou as dependências do aplicativo
+original. Se a API não confirmar um envio e o resultado ficar indeterminado, a
+mensagem pode ficar sem aviso. O cursor evita uma resposta duplicada.
+
+Para usar o modelo, instale `processos/responder_encerramento.php` em
+`/usr/local/lib/dealnibot-encerramento/`, sob propriedade do root, e instale a
+unidade systemd. Com o webhook do mesmo bot desativado, disponibilize seu token
+em `/etc/dealnibot-encerramento/telegram.token`, com acesso exclusivo do root.
+O systemd entrega a credencial ao serviço e mantém o estado privado. Preserve
+esse estado nas atualizações para manter o horário de ativação e o cursor do
+Telegram. Para suspender o aviso, use
+`systemctl disable --now dealnibot-aviso-encerramento.service`.
+
 ## Setup local
 
 1. Instale os [pré-requisitos](#pré-requisitos). Use um checkout Git para o

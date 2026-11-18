@@ -1,12 +1,12 @@
 # DealniBot
 
-**Projeto descontinuado.** O serviço original no Telegram está em processo de
-encerramento. O repositório preserva o código e a documentação como referência.
+**Projeto descontinuado.** O atendimento original foi encerrado. No Telegram,
+o bot apenas informa o encerramento em conversas privadas. O repositório
+preserva o código e a documentação como referência.
 
-Assistente de IA para grupos do Telegram, com conversa por texto,
-interpretação de imagens e transcrição de áudio. Mantém memória curta e
-controla a cota diária de cada grupo. No privado, orienta a adicionar o bot
-a um grupo para conversar.
+A aplicação original era um assistente de IA para grupos do Telegram, com
+conversa por texto, interpretação de imagens e transcrição de áudio.
+Mantinha memória curta e controlava a cota diária de cada grupo.
 
 [Funcionalidades](docs/FUNCIONALIDADES.md) ·
 [Arquitetura](docs/ARQUITETURA.md) · [Setup local](docs/OPERACAO.md#setup-local)
