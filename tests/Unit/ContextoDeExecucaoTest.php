@@ -128,20 +128,21 @@ final class ContextoDeExecucaoTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $gerado);
     }
 
-    /**
-     * O literal do nome do serviço vive AQUI, e não dentro de
-     * `ContextoDeExecucao` — é o que permite àquela classe não carregar valor
-     * nenhum deste bot e ainda assim ter o nome conferido.
-     *
-     * A classe deriva `service` do diretório raiz, o mesmo mecanismo de
-     * `scripts/deploy/registrar_publicacao.sh`. Este teste é o contrapeso: um
-     * checkout publicado em diretório com outro nome passaria a logar `service`
-     * errado em silêncio, e o log de um incidente apontaria para o bot errado.
-     */
-    public function testServicoEhONomeDesteRepositorio(): void
+    public function testServicoMantemONomeEmUmCheckoutRenomeado(): void
     {
         $this->assertSame(self::NOME_DO_SERVICO, ContextoDeExecucao::servico());
-        $this->assertSame(basename(dirname(__DIR__, 2)), ContextoDeExecucao::servico());
+
+        $raiz = sys_get_temp_dir() . '/checkout-renomeado-' . bin2hex(random_bytes(6));
+        $suporte = $raiz . '/src/Support';
+        self::assertTrue(mkdir($suporte, 0700, true));
+        $this->diretoriosTemporarios[] = $raiz;
+        $arquivo = $suporte . '/ContextoDeExecucao.php';
+        self::assertTrue(copy(__DIR__ . '/../../src/Support/ContextoDeExecucao.php', $arquivo));
+
+        $codigo = 'require $argv[1]; echo App\Support\ContextoDeExecucao::servico();';
+        $resultado = $this->executarNoDiretorio([PHP_BINARY, '-r', $codigo, $arquivo], $raiz);
+        self::assertSame(0, $resultado['status'], $resultado['saida']);
+        self::assertSame(self::NOME_DO_SERVICO, $resultado['saida']);
     }
 
     public function testAmbienteEhSempreUmDosQuatroNomesDoContrato(): void

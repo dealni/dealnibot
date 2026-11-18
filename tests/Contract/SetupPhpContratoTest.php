@@ -147,7 +147,7 @@ final class SetupPhpContratoTest extends TestCase
             foreach (['CHATBOTS_CI_EXPECTED_UID=', 'CHATBOTS_CI_EXPECTED_GID=', 'CHATBOTS_CI_PARENT_NETNS='] as $variavel) {
                 self::assertSame($quantidade, substr_count($workflow, $variavel), $arquivo);
             }
-            self::assertSame($quantidade, substr_count($workflow, '/usr/bin/env HOME="$HOME" USER="$(id -un)" LOGNAME="$(id -un)"'), $arquivo);
+            self::assertSame($quantidade, substr_count($workflow, '--clear-groups -- /usr/bin/env PATH="$PATH" HOME="$HOME" USER="$(id -un)" LOGNAME="$(id -un)"'), $arquivo);
             self::assertStringNotContainsString(';user=', $workflow, $arquivo);
             self::assertStringNotContainsString(';password=', $workflow, $arquivo);
         }

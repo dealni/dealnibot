@@ -140,7 +140,9 @@ jobs:
         run: |
           set -o pipefail
           for order in random reverse; do
-            sudo /usr/bin/unshare --net -- /usr/bin/setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- /usr/bin/env HOME="$HOME" USER="$(id -un)" LOGNAME="$(id -un)" CHATBOTS_CI_EXPECTED_UID="$(id -u)" CHATBOTS_CI_EXPECTED_GID="$(id -g)" CHATBOTS_CI_PARENT_NETNS="$(/usr/bin/readlink /proc/self/ns/net)" \
+            # O sudo redefine PATH. Recupere os clientes do PostgreSQL do job
+            # somente após voltar ao UID/GID do runner.
+            sudo /usr/bin/unshare --net -- /usr/bin/setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- /usr/bin/env PATH="$PATH" HOME="$HOME" USER="$(id -un)" LOGNAME="$(id -un)" CHATBOTS_CI_EXPECTED_UID="$(id -u)" CHATBOTS_CI_EXPECTED_GID="$(id -g)" CHATBOTS_CI_PARENT_NETNS="$(/usr/bin/readlink /proc/self/ns/net)" \
               'CHATBOTS_PG_TEST_DSN=pgsql:host=/tmp/chatbots-tests-pg-dealnibot;dbname=chatbots_test_suite_dealnibot' \
               DEALNI_DB_USER=postgres DEALNI_DB_PASSWORD=test-only \
               bash scripts/quality/check_ci_namespace.sh php -d error_reporting=E_ALL -d display_errors=1 -d display_startup_errors=1 \
@@ -408,8 +410,18 @@ jobs:
       - name: Rector (dry-run)
         continue-on-error: true
         run: |
-          set -o pipefail
-          composer rector | tee rector.log
+          set +e
+          composer rector 2>&1 | tee rector.log
+          status=("${PIPESTATUS[@]}")
+          set -e
+          if [ "${status[1]}" -ne 0 ]; then
+            exit "${status[1]}"
+          fi
+          # O código 2 do Rector em dry-run indica sugestões registradas no artefato.
+          if [ "${status[0]}" -eq 2 ]; then
+            exit 0
+          fi
+          exit "${status[0]}"
       - name: Outdated direct dependencies
         continue-on-error: true
         run: |

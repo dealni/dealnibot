@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, writeFileSync, cpSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, basename } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '../..');
 const files = ['rollback.sh', 'deploy_verify.sh', 'registrar_publicacao.sh', 'publicacao_operacao.sh', 'publicacao_agendamentos.sh', 'publicacao_processos.php', 'publicacao_recuperacao.sh', 'publicacao_bundle.php', 'recuperar_publicacao.sh'];
 function fixture(body) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'bundle-fixture-')));
-  const locks = join(dir, 'privado'); const projects = join(dir, 'checkouts'); const bot = basename(root);
+  const locks = join(dir, 'privado'); const projects = join(dir, 'checkouts');
+  // A fixture usa o slug da instalação, independentemente do nome do checkout de testes.
+  const bot = 'dealnibot';
   const project = join(projects, bot); mkdirSync(locks, { mode: 0o700 }); mkdirSync(join(project, 'scripts/deploy'), { recursive: true }); mkdirSync(join(project, 'scripts/quality'), { recursive: true });
   for (const file of files) cpSync(join(root, 'scripts/deploy', file), join(project, 'scripts/deploy', file));
   cpSync(join(root, 'scripts/quality/validar_sonda_publicada.php'), join(project, 'scripts/quality/validar_sonda_publicada.php'));

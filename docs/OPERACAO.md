@@ -57,8 +57,8 @@ gitleaks ausente reprova tanto no pre-commit quanto no `check:all`.
 1. Instale os [pré-requisitos](#pré-requisitos). Use um checkout Git para o
    `setup:dev` e para os portões de qualidade que verificam o histórico e o
    índice. Se partiu de um ZIP, rode `git init -b main` na raiz extraída antes
-   de instalar as dependências de desenvolvimento. Use `dealnibot` como nome
-   do diretório para os contratos dos scripts de operação. Para rodar o
+   de instalar as dependências de desenvolvimento. O checkout local pode ter
+   qualquer nome. Logs e sondas usam `service=dealnibot`. Para rodar o
    `check:all`, crie um commit inicial com os arquivos revisados em seu Git
    local. O `.gitignore` cobre os arquivos de credenciais e os artefatos locais.
 
@@ -197,6 +197,10 @@ sudo -u dealnibot psql -h /var/run/postgresql -d dealnibot -c 'TABLE schema_migr
 ```
 
 ## Modelos de instalação
+
+Os modelos e scripts de publicação no host usam `/var/www/dealnibot` como
+diretório de instalação. Essa convenção vale para a publicação que usa esses
+scripts.
 
 | Componente | Arquivo de referência |
 |---|---|

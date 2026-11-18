@@ -229,7 +229,7 @@ final class LoggerFactory
 
     private static function logsAtivos(): bool
     {
-        return defined('LOGS_ATIVO') && LOGS_ATIVO;
+        return defined('LOGS_ATIVO') && (bool) LOGS_ATIVO;
     }
 
     /**

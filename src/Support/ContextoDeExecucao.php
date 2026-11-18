@@ -25,9 +25,7 @@ namespace App\Support;
 final class ContextoDeExecucao
 {
     // --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) -----
-    // Vazio de propósito: o nome do serviço vem do diretório raiz e o carimbo
-    // de publicação vem de uma variável de ambiente com o prefixo comum
-    // (`CHATBOTS_`), não com o prefixo deste bot.
+    private const NOME_DO_SERVICO = 'dealnibot';
     // --- FIM DOS DADOS; daqui para baixo o código é canônico -----------------
 
     /**
@@ -92,22 +90,11 @@ final class ContextoDeExecucao
     }
 
     /**
-     * Nome do serviço no campo `service` — o nome do repositório.
-     *
-     * Sai do DIRETÓRIO RAIZ, que é o mesmo mecanismo de
-     * `scripts/deploy/registrar_publicacao.sh` (que grava `bot` no
-     * `.release.json` a partir de `basename "$project_dir"`). Uma constante
-     * com o nome escrito dentro seria um valor por bot no meio do arquivo —
-     * exatamente o que este arranjo evita.
-     *
-     * Na VPS o checkout é `/var/www/<bot>`; na máquina de desenvolvimento é
-     * `~/Developer/Chatbots/<bot>`. Nos dois o basename é o nome do bot, e o
-     * teste deste repositório crava o literal esperado — é ele que reprova se
-     * alguém publicar o código num diretório com outro nome.
+     * Nome estável do serviço nas sondas e nos logs, independente do checkout.
      */
     public static function servico(): string
     {
-        return basename(self::raiz());
+        return self::NOME_DO_SERVICO;
     }
 
     public static function ambiente(): string
