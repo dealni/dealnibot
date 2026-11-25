@@ -1,5 +1,5 @@
 [Unit]
-Description=Aviso de encerramento do DealniBot no privado
+Description=Aviso de pausa do DealniBot em conversas privadas
 Wants=network-online.target
 After=network-online.target
 

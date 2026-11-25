@@ -1,73 +1,61 @@
 # DealniBot
 
-**Projeto descontinuado.** O atendimento original foi encerrado. No Telegram,
-o bot apenas informa o encerramento em conversas privadas. O repositório
-preserva o código e a documentação como referência.
+**Assistente pausado.** O `@DealniBot` mantém um aviso de pausa em conversas
+privadas no Telegram.
 
-A aplicação original era um assistente de IA para grupos do Telegram, com
-conversa por texto, interpretação de imagens e transcrição de áudio.
-Mantinha memória curta e controlava a cota diária de cada grupo.
+O assistente de grupo participa quando alguém o menciona ou responde a uma
+de suas mensagens. Usa o OpenRouter para conversar, interpretar imagens e
+transcrever áudios. A memória é temporária e cada grupo tem uma cota diária.
 
-[Funcionalidades](docs/FUNCIONALIDADES.md) ·
-[Arquitetura](docs/ARQUITETURA.md) · [Setup local](docs/OPERACAO.md#setup-local)
+O código usa PHP 8.5, PostgreSQL, Redis e Monolog. Para testar uma instância
+própria, execute o bot em long polling no terminal. Os modelos de instalação
+usam Nginx e PHP-FPM com webhook.
 
-## Principais recursos
+## Rodar localmente
 
-- Respostas por menção, resposta a uma mensagem do bot ou participação aleatória.
-- Texto, imagens e áudio atendidos por integrações via OpenRouter.
-- Memória conversacional separada por grupo, tópico e participante.
-- Cota diária por grupo e controle de admissão de mídia.
-- Recebimento durável de updates, com retentativa de processamento.
-
-**Stack:** PHP 8.5 sem framework · PostgreSQL 16+ · Redis dedicado · Monolog ·
-Nginx + PHP-FPM por webhook, com trabalhos de fundo por cron.
-Node 24 e npm 12 são ferramentas de desenvolvimento. Consulte as versões em
-[REFERENCIAS.md](docs/REFERENCIAS.md).
-
-## Começar
-
-Depois de instalar as dependências, crie o arquivo privado de configuração.
+Instale os [pré-requisitos](docs/OPERACAO.md#pré-requisitos), clone o
+repositório e prepare as dependências e a configuração local.
 
 ```bash
+git clone https://github.com/dealni/dealnibot-publico.git
+cd dealnibot-publico
+composer setup:dev
 bash scripts/install/configurar_credenciais.sh
 ```
 
-O [setup local](docs/OPERACAO.md#setup-local) descreve os pré-requisitos,
-a configuração com bot e credenciais próprios, a criação do banco de
-desenvolvimento e o início do Redis e do long polling. Os testes usam
-configuração sintética e dispensam credenciais de serviços externos.
+Use um bot de desenvolvimento próprio. O guia de setup descreve como preencher
+as credenciais, preparar o PostgreSQL e o Redis e executar `php bot.php`.
+[Setup local](docs/OPERACAO.md#setup-local).
 
-## Documentação
+## Validar
 
-| Documento | Responsável por |
-| --- | --- |
-| [VISAO_GERAL.md](docs/VISAO_GERAL.md) | finalidade, glossário e limites do projeto |
-| [ARQUITETURA.md](docs/ARQUITETURA.md) | componentes, pastas, fluxos, configuração e decisões |
-| [DADOS.md](docs/DADOS.md) | tabelas, migrations, retenção, Redis, backup e restauração |
-| [FUNCIONALIDADES.md](docs/FUNCIONALIDADES.md) | gatilhos, regras, mensagens, limites e fluxos críticos |
-| [INTEGRACOES.md](docs/INTEGRACOES.md) | Telegram, OpenRouter e Redis |
-| [OPERACAO.md](docs/OPERACAO.md) | setup, variáveis, comandos, deploy, rollback, logs e runbooks |
-| [SEGURANCA.md](docs/SEGURANCA.md) | ameaças, segredos, superfície exposta, LGPD e política |
-| [TESTES.md](docs/TESTES.md) | taxonomia, portões, hooks e CI |
-| [CONVENCOES.md](docs/CONVENCOES.md) | regras para alterar o código, commits e documentação |
-| [REFERENCIAS.md](docs/REFERENCIAS.md) | versões e links oficiais |
-
-## Validação local
+Execute `composer test` para rodar a suíte com credenciais sintéticas e
+serviços descartáveis. O `pre-push` também valida o carregamento de
+`inclusos/config.php`. Em um checkout sem esse arquivo, o gerador do CI cria
+uma configuração descartável para executar o portão completo.
 
 ```bash
+if [ ! -e inclusos/config.php ] && [ ! -L inclusos/config.php ]; then
+    (umask 077; CI=true php scripts/quality/prepare_ci_config.php)
+fi
 bash scripts/quality/with_local_config.sh composer check:all
 ```
 
-Para validar a partir de um ZIP, prepare primeiro um
-[checkout Git local](docs/OPERACAO.md#setup-local).
+Os portões usam um checkout Git. O guia de testes lista as ferramentas
+exigidas e explica o isolamento de rede. [Guia de testes](docs/TESTES.md).
 
-O `pre-push` local usa configuração sintética, PostgreSQL descartável e
-verificações offline. Composição, requisitos e auditorias online ficam em
-[TESTES.md](docs/TESTES.md#portões-de-qualidade).
+## Documentação
+
+- [Visão geral](docs/VISAO_GERAL.md), [funcionalidades](docs/FUNCIONALIDADES.md)
+  e [arquitetura](docs/ARQUITETURA.md)
+- [Dados](docs/DADOS.md), [integrações](docs/INTEGRACOES.md) e
+  [segurança](docs/SEGURANCA.md)
+- [Operação](docs/OPERACAO.md), [testes](docs/TESTES.md),
+  [convenções](docs/CONVENCOES.md) e [referências](docs/REFERENCIAS.md)
 
 ## Licença
 
 Código autoral proprietário. Todos os direitos reservados.
 
 A classe Telegram e os traits derivados de TelegramBotPHP incluem código
-distribuído sob licença MIT. Consulte o [aviso do TelegramBotPHP](LICENSES/TelegramBotPHP.txt).
+distribuído sob licença MIT. [Aviso do TelegramBotPHP](LICENSES/TelegramBotPHP.txt).

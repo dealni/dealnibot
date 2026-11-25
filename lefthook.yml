@@ -1,6 +1,5 @@
-# Hooks deste repositório. O script de staged preserva as travas rápidas de
-# caminhos proibidos, segredos, sintaxe, Composer e links de documento; os
-# portões de workflow saíram dele junto com o CI bloqueado por cobrança.
+# O pre-commit verifica caminhos proibidos, segredos, sintaxe, Composer e
+# links de documentos no índice. Os portões de workflow rodam no CI.
 
 # Use sempre o binário travado no package-lock.
 lefthook: ./node_modules/.bin/lefthook

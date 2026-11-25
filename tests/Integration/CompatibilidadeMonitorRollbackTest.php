@@ -58,7 +58,8 @@ final class CompatibilidadeMonitorRollbackTest extends TestCase
 
     public function testTimerInstaladoAceitaDestinoCompativelERecusaAntigoAntesDaParada(): void
     {
-        self::assertSame(0, $this->validar('loaded', $this->compativel)['codigo']);
+        $aceite = $this->validar('loaded', $this->compativel);
+        self::assertSame(0, $aceite['codigo'], $aceite['saida']);
         $recusa = $this->validar('loaded', $this->antigo);
         self::assertSame(1, $recusa['codigo']);
         self::assertStringContainsString('Rollback recusado antes da parada', $recusa['saida']);
@@ -95,6 +96,12 @@ SH;
     private function rodar(array $comando, string $estado = ''): array
     {
         $ambiente = getenv();
+        // A fixture cria seu próprio histórico Git sem configuração herdada.
+        foreach (array_keys($ambiente) as $nome) {
+            if (str_starts_with($nome, 'GIT_')) {
+                unset($ambiente[$nome]);
+            }
+        }
         $ambiente['FAKE_LOAD_STATE'] = $estado;
         $pipes = [];
         $processo = proc_open($comando, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->diretorio, $ambiente);
@@ -106,6 +113,10 @@ SH;
         self::assertIsString($saida);
         self::assertIsString($erro);
         $saida .= $erro;
-        return ['codigo' => proc_close($processo), 'saida' => $saida];
+        $codigo = proc_close($processo);
+        if ($comando[0] === 'git') {
+            self::assertSame(0, $codigo, $saida);
+        }
+        return ['codigo' => $codigo, 'saida' => $saida];
     }
 }

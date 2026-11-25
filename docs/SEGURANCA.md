@@ -209,9 +209,9 @@ Achado novo se conserta no código: não existe `nosemgrep`, fingerprint novo ne
 
 ## Política de segurança
 
-O projeto está descontinuado. Se encontrar uma vulnerabilidade ou credencial
-exposta neste código, envie o relato pelo canal privado de avisos de segurança
-do repositório, quando disponível, ou por um canal privado com o proprietário.
+Se encontrar uma vulnerabilidade ou credencial exposta neste código, envie
+o relato pelo canal privado de avisos de segurança do repositório, quando
+disponível, ou por um canal privado com o proprietário.
 Identifique a versão, o impacto e os passos mínimos com dados sintéticos.
 Mantenha credenciais, dados pessoais e detalhes sensíveis em canal privado.
 

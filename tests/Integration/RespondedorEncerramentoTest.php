@@ -79,8 +79,8 @@ final class RespondedorEncerramentoTest extends TestCase
 
         self::assertSame([
             ['getUpdates', ['offset' => 0, 'timeout' => 30, 'limit' => 20, 'allowed_updates' => ['message']]],
-            ['sendMessage', ['chat_id' => 321, 'text' => 'O DealniBot foi desativado e não está mais em funcionamento.']],
-            ['sendMessage', ['chat_id' => 789, 'text' => 'O DealniBot foi desativado e não está mais em funcionamento.']],
+            ['sendMessage', ['chat_id' => 321, 'text' => 'O DealniBot está temporariamente pausado. Durante a pausa, os comandos e as funções do bot estão indisponíveis.']],
+            ['sendMessage', ['chat_id' => 789, 'text' => 'O DealniBot está temporariamente pausado. Durante a pausa, os comandos e as funções do bot estão indisponíveis.']],
         ], $pedidos);
         self::assertSame(['ativado_em' => 100, 'offset' => 14], $this->estadoEmDisco());
         processarLote($estado, $telegram, []);

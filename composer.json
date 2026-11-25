@@ -1,6 +1,6 @@
 {
     "name": "dealni/dealnibot",
-    "description": "Bot do Telegram com IA (GPT-6 Luna xhigh/Whisper Large V3 Turbo) via OpenRouter.",
+    "description": "Assistente de IA para grupos do Telegram, com integração ao OpenRouter.",
     "license": "proprietary",
     "require": {
         "php": ">=8.5.12 <8.6",

@@ -64,9 +64,10 @@ Português no domínio, inglês na infraestrutura
 
 ## Estado do projeto
 
-O serviço original está em processo de encerramento. O código documentado
-implementa webhook, persistência no PostgreSQL, tarefas por cron e long
-polling para desenvolvimento.
+O assistente está pausado. Os fluxos acima descrevem o comportamento de uma
+instalação própria. O projeto inclui ainda um serviço independente que envia
+um aviso de pausa em conversas privadas.
+[Aviso de pausa](OPERACAO.md#aviso-de-pausa-no-telegram).
 
 ## O que o sistema não faz
 

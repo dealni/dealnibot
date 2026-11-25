@@ -9,7 +9,7 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
-const MENSAGEM = 'O DealniBot foi desativado e não está mais em funcionamento.';
+const MENSAGEM = 'O DealniBot está temporariamente pausado. Durante a pausa, os comandos e as funções do bot estão indisponíveis.';
 const RETENCAO_TELEGRAM = 86400;
 const LONG_POLLING = 30;
 

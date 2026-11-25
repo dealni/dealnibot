@@ -20,13 +20,8 @@
 #   3. SINTAXE — PHP e shell alterados no índice, mais os gates de Composer e
 #      de links locais, e só quando um arquivo do assunto foi alterado.
 #
-# O que NÃO está aqui é decisão, não esquecimento: os portões de workflow e de
-# composite action saíram do pre-commit porque dependem de rede e de binário
-# externo e custavam mais do que entregavam a cada commit — e porque validam
-# YAML que hoje ninguém executa, com o GitHub Actions bloqueado por cobrança.
-# Os scripts continuam no repositório e são chamáveis à mão
-# (`composer check:workflows`, `npm run check:composite-actions`); religue-os no
-# `check:all` junto com o CI.
+# Os portões de workflow e de composite actions rodam no CI e também podem
+# ser executados com `composer check:workflows` e `npm run check:composite-actions`.
 #
 # Não há atalho para pular estas travas: o que o hook apontou se corrige antes
 # de commitar.

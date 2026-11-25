@@ -38,6 +38,11 @@ fi
 
 set -euo pipefail
 
+# No macOS, a fórmula PHP 8.5 pode estar instalada sem link em bin/.
+if [[ "$OSTYPE" == darwin* ]]; then
+    export PATH="/opt/homebrew/opt/php@8.5/bin:/usr/local/opt/php@8.5/bin:$PATH"
+fi
+
 # --- DADOS DESTE REPOSITÓRIO (a personalização entra só neste bloco) --------
 expected_dir="/var/www/dealnibot"
 runtime_group="dealnibot"

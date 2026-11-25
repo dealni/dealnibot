@@ -313,11 +313,8 @@ describe("actions referenciadas pelos workflows", () => {
   });
 });
 
-// O portão saiu do agregado local, mas não saiu do repositório: o Actions da
-// conta está bloqueado por cobrança, e conferir workflow que ninguém executa só
-// tomaria tempo de quem roda `composer check:all` antes de empurrar. O que este
-// teste guarda é a outra metade do acordo — o comando continua existindo, e
-// continua chamável à mão no dia em que o Actions voltar.
+// Os comandos de validação dos workflows rodam no CI e ficam disponíveis
+// separadamente para quem revisa alterações nos arquivos do GitHub Actions.
 it("segue chamável à mão, fora do agregado local", () => {
   const manifesto = JSON.parse(
     readFileSync(new URL("../../composer.json", import.meta.url), "utf8"),

@@ -8,10 +8,11 @@ em [DADOS.md](DADOS.md).
 ## Pré-requisitos
 
 Use PHP `>=8.5.12 <8.6` com as extensões `ctype`, `curl`, `filter`,
-`json`, `mbstring`, `pdo`, `pdo_pgsql` e `redis`. A instalação local também
-precisa de Git, Composer 2.10.3, PostgreSQL 16+ e uma instância Redis dedicada.
-O `setup:dev` e as verificações usam Node 24 e npm 12 conforme os pinos dos
-manifestos. Consulte as [versões](REFERENCIAS.md#runtime-e-plataforma).
+`json`, `mbstring`, `pdo`, `pdo_pgsql` e `redis` (phpredis `^6.3`).
+A instalação local também precisa de Git, Composer 2.10.3, PostgreSQL 16+
+e uma instância Redis dedicada.
+O `setup:dev` e as verificações usam Node 24 a partir de 24.22.1 e npm
+12.2.1. Consulte as [versões](REFERENCIAS.md#runtime-e-plataforma).
 
 Confira `composer --no-plugins --version`. Se divergir, instale o PHAR 2.10.3
 em caminho separado pelo [procedimento oficial](https://getcomposer.org/download/),
@@ -52,15 +53,14 @@ composer install -d tools/phpcpd              # PHPCPD
 
 gitleaks ausente reprova tanto no pre-commit quanto no `check:all`.
 
-## Aviso de encerramento no Telegram
+## Aviso de pausa no Telegram
 
 O [serviço systemd do aviso](../deploy/systemd/dealnibot-aviso-encerramento.service)
-executa apenas `responder_encerramento.php`. Ele responde a mensagens privadas
-enviadas por pessoas após a primeira ativação e ignora grupos, canais, edições,
-eventos de serviço e atualizações anteriores. Usa a API do Telegram por long
-polling, sem webhook, banco de dados, Redis ou as dependências do aplicativo
-original. Se a API não confirmar um envio e o resultado ficar indeterminado, a
-mensagem pode ficar sem aviso. O cursor evita uma resposta duplicada.
+executa `responder_encerramento.php`. A unidade e o arquivo conservam os
+nomes históricos. O serviço responde a novas mensagens privadas de pessoas
+desde a primeira ativação. Ele usa long polling no Telegram e mantém um
+cursor local para evitar respostas duplicadas. Se o resultado de um envio
+ficar indeterminado, a conversa pode ficar sem aviso.
 
 Para usar o modelo, instale `processos/responder_encerramento.php` em
 `/usr/local/lib/dealnibot-encerramento/`, sob propriedade do root, e instale a
@@ -75,11 +75,10 @@ Telegram. Para suspender o aviso, use
 
 1. Instale os [pré-requisitos](#pré-requisitos). Use um checkout Git para o
    `setup:dev` e para os portões de qualidade que verificam o histórico e o
-   índice. Se partiu de um ZIP, rode `git init -b main` na raiz extraída antes
-   de instalar as dependências de desenvolvimento. O checkout local pode ter
-   qualquer nome. Logs e sondas usam `service=dealnibot`. Para rodar o
-   `check:all`, crie um commit inicial com os arquivos revisados em seu Git
-   local. O `.gitignore` cobre os arquivos de credenciais e os artefatos locais.
+   índice. Prefira clonar o repositório. O checkout pode ter qualquer nome e os
+   logs e sondas usam `service=dealnibot`. Para usar um ZIP na validação,
+   inicialize o Git na raiz extraída e crie um commit com os arquivos revisados.
+   O `.gitignore` cobre os arquivos de credenciais e os artefatos locais.
 
 2. Crie um bot próprio no Telegram pelo BotFather e obtenha uma chave do
    OpenRouter para essa instância. Guarde ambos em `inclusos/config.php`.
@@ -125,8 +124,9 @@ Telegram. Para suspender o aviso, use
 
 5. Na mesma sessão, exporte `DEALNI_BOT_USERNAME` com o nome de usuário
    do bot, sem @, para que ele reconheça menções a esse nome. Inicie
-   `php bot.php` com as variáveis do banco e do Redis. Use uma única instância de polling por token. Se o bot de teste
-   já tem webhook, primeiro remova-o com `php config/config_remover.php`
+   `php bot.php` com as variáveis do banco e do Redis. Use uma única instância
+   de polling por token. Se o bot de teste já tem webhook, primeiro remova-o
+   com `php config/config_remover.php`
    usando as credenciais dele. Polling dispensa `DEALNI_PUBLIC_BASE_URL`.
 
 O `setup:dev` instala as dependências do checkout e os hooks. Banco e
@@ -178,12 +178,11 @@ com o wrapper `scripts/operacao/executar_com_ambiente.sh`.
 ## Comandos do dia a dia
 
 ```bash
-php bot.php               # long polling
-composer check            # validação de base
-composer check:all        # tudo o que é offline, antes de publicar
-bash scripts/quality/with_local_config.sh composer check:ci-local  # alternativa com auditorias online
-composer test             # suíte inteira, em sandbox de rede
-composer format           # aplica o estilo
+php bot.php    # long polling com um bot de desenvolvimento
+composer test  # suíte inteira, com isolamento de rede
+composer format
+bash scripts/quality/with_local_config.sh composer check:all
+bash scripts/quality/with_local_config.sh composer check:ci-local
 ```
 
 Portões e testes estão em [TESTES.md](TESTES.md#portões-de-qualidade); a tabela

@@ -62,6 +62,6 @@ final class ComposerUnusedGateTest extends TestCase
         ]);
 
         $this->assertSame(1, $resultado['status']);
-        $this->assertStringContainsString('does not exist or is not readable', $resultado['saida']);
+        $this->assertMatchesRegularExpression('/does\s+not\s+exist\s+or\s+is\s+not\s+readable/', $resultado['saida']);
     }
 }

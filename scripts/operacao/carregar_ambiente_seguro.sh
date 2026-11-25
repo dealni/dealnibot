@@ -62,9 +62,11 @@ carregar_ambiente_seguro() {
     # O caminho de ferramentas não vem do operador que chamou o wrapper nem
     # do arquivo de ambiente. Assim, até o `sed` usado para decodificar os
     # valores é resolvido por um PATH conhecido.
-    # Inclua os prefixos Homebrew conhecidos para manter a portabilidade no
-    # macOS Apple Silicon/Intel, sem jamais reutilizar PATH herdado do caller.
+    # O PHP 8.5 do Homebrew pode estar instalado sem link em bin/ no macOS.
     PATH='/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    if [[ "$OSTYPE" == darwin* ]]; then
+        PATH="/opt/homebrew/opt/php@8.5/bin:/usr/local/opt/php@8.5/bin:$PATH"
+    fi
     export PATH
 
     schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/config/env.schema.php"
